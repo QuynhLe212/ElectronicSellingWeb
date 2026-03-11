@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     FiUser, FiPackage, FiMapPin, FiHeart, FiSettings, FiLogOut,
     FiEdit2, FiPhone, FiMail, FiCalendar, FiAward, FiStar,
@@ -30,6 +30,7 @@ const orderStatusIcon = {
 };
 
 export default function ProfilePage() {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');
     const [orderFilter, setOrderFilter] = useState('all');
     const [editingProfile, setEditingProfile] = useState(false);
@@ -54,6 +55,16 @@ export default function ProfilePage() {
 
     const updateProfile = (field, value) => {
         setProfileData((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleLogout = () => {
+        // Xóa dữ liệu phiên làm việc
+        localStorage.removeItem('user_token');
+        localStorage.removeItem('user_email');
+        localStorage.removeItem('user_name');
+        
+        // Điều hướng về trang đăng nhập
+        navigate('/login');
     };
 
     return (
@@ -123,7 +134,7 @@ export default function ProfilePage() {
                                 </button>
                             ))}
                         </nav>
-                        <button className="profile__nav-btn profile__nav-btn--logout">
+                        <button className="profile__nav-btn profile__nav-btn--logout" onClick={handleLogout}>
                             <FiLogOut size={18} />
                             <span>Đăng xuất</span>
                         </button>
