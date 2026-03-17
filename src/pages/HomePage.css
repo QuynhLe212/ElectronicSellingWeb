@@ -381,53 +381,6 @@
     color: var(--primary);
 }
 
-/* ===== NEWSLETTER ===== */
-.newsletter {
-    background: linear-gradient(135deg, #0056b3 0%, #0070e0 100%);
-    padding: 72px 0;
-}
-
-.newsletter__inner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 40px;
-}
-
-.newsletter__title {
-    font-size: 32px;
-    font-weight: 800;
-    color: var(--white);
-    margin-bottom: 8px;
-}
-
-.newsletter__text {
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.8);
-    max-width: 400px;
-}
-
-.newsletter__form {
-    display: flex;
-    gap: 0;
-    background: var(--white);
-    border-radius: var(--radius-md);
-    padding: 6px;
-    min-width: 420px;
-}
-
-.newsletter__input {
-    flex: 1;
-    padding: 12px 20px;
-    font-size: 15px;
-    background: transparent;
-    color: var(--gray-800);
-}
-
-.newsletter__input::placeholder {
-    color: var(--gray-500);
-}
-
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
     .hero__title {

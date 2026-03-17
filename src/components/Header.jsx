@@ -65,20 +65,6 @@ export default function Header() {
 
     return (
         <header className={`header ${scrolled ? 'header--scrolled' : ''}`}>
-            {/* Thanh phía trên */}
-            <div className="header__top">
-                <div className="container header__top-inner">
-                    <div className="header__top-left">
-                        <FiTruck size={14} />
-                        <span>Miễn phí vận chuyển cho đơn hàng từ 2.000.000₫</span>
-                    </div>
-                    <div className="header__top-right">
-                        <a href="tel:+84901234567"><FiPhone size={12} /> 0901 234 567</a>
-                        <a href="mailto:hotro@electroshop.vn"><FiMail size={12} /> Hỗ trợ</a>
-                    </div>
-                </div>
-            </div>
-
             {/* Thanh chính */}
             <div className="header__main">
                 <div className="container header__main-inner">
