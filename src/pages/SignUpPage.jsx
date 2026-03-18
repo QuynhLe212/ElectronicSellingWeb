@@ -270,28 +270,6 @@ export default function SignUpPage() {
                             {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
                         </button>
                     </form>
-
-                    {/* Divider */}
-                    <div className="signup__divider">
-                        <span>Hoặc đăng ký với</span>
-                    </div>
-
-                    {/* Social Signup */}
-                    <div className="signup__social">
-                        <button className="signup__social-btn signup__social-btn--google">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032 c0-3.331,2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.461,2.268,15.365,1,12.545,1 C6.777,1,2,5.777,2,11.545c0,5.768,4.777,10.545,10.545,10.545c6.134,0,10.216-4.335,10.216-10.452c0-0.612-0.053-1.210-0.149-1.804 H12.545z"/>
-                            </svg>
-                            Google
-                        </button>
-                        <button className="signup__social-btn signup__social-btn--facebook">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                            </svg>
-                            Facebook
-                        </button>
-                    </div>
-
                     {/* Login Link */}
                     <div className="signup__footer">
                         <p>Đã có tài khoản? <Link to="/login" className="signup__link">Đăng nhập</Link></p>

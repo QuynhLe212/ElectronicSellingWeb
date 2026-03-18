@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
 import './LoginPage.css';
 
 export default function LoginPage() {
+    const [activeIndex, setActiveIndex] = useState(0);
     const navigate = useNavigate();
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState({
@@ -13,6 +14,15 @@ export default function LoginPage() {
     });
     const [errors, setErrors] = useState({});
     const [isLoading, setIsLoading] = useState(false);
+
+    // ✅ AUTO SLIDE
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setActiveIndex(prev => (prev + 1) % 4);
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     const validateForm = () => {
         const newErrors = {};
@@ -53,13 +63,10 @@ export default function LoginPage() {
         }
 
         setIsLoading(true);
-        // Simulate API call
         setTimeout(() => {
-            // Save user session (in real app, you'd save token to localStorage)
             localStorage.setItem('user_token', 'fake-token-' + Date.now());
             localStorage.setItem('user_email', formData.email);
             setIsLoading(false);
-            // Redirect to profile page
             navigate('/profile');
         }, 1000);
     };
@@ -67,7 +74,8 @@ export default function LoginPage() {
     return (
         <div className="login-page">
             <div className="login-container">
-                {/* Left Content */}
+
+                {/* LEFT */}
                 <div className="login__content">
                     <div className="login__header">
                         <h1 className="login__title">Đăng nhập</h1>
@@ -75,14 +83,14 @@ export default function LoginPage() {
                     </div>
 
                     <form className="login__form" onSubmit={handleSubmit}>
-                        {/* Email Field */}
+                        
+                        {/* Email */}
                         <div className="login__field">
-                            <label htmlFor="email" className="login__label">Email</label>
+                            <label className="login__label">Email</label>
                             <div className="login__input-wrapper">
                                 <FiMail className="login__input-icon" />
                                 <input
                                     type="email"
-                                    id="email"
                                     name="email"
                                     className={`login__input ${errors.email ? 'login__input--error' : ''}`}
                                     placeholder="you@example.com"
@@ -93,14 +101,13 @@ export default function LoginPage() {
                             {errors.email && <span className="login__error">{errors.email}</span>}
                         </div>
 
-                        {/* Password Field */}
+                        {/* Password */}
                         <div className="login__field">
-                            <label htmlFor="password" className="login__label">Mật khẩu</label>
+                            <label className="login__label">Mật khẩu</label>
                             <div className="login__input-wrapper">
                                 <FiLock className="login__input-icon" />
                                 <input
                                     type={showPassword ? 'text' : 'password'}
-                                    id="password"
                                     name="password"
                                     className={`login__input ${errors.password ? 'login__input--error' : ''}`}
                                     placeholder="••••••••"
@@ -112,13 +119,13 @@ export default function LoginPage() {
                                     className="login__toggle-password"
                                     onClick={() => setShowPassword(!showPassword)}
                                 >
-                                    {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                                    {showPassword ? <FiEyeOff /> : <FiEye />}
                                 </button>
                             </div>
                             {errors.password && <span className="login__error">{errors.password}</span>}
                         </div>
 
-                        {/* Remember Me & Forgot Password */}
+                        {/* Options */}
                         <div className="login__options">
                             <label className="login__checkbox">
                                 <input
@@ -132,7 +139,7 @@ export default function LoginPage() {
                             <a href="#" className="login__forgot-link">Quên mật khẩu?</a>
                         </div>
 
-                        {/* Submit Button */}
+                        {/* Submit */}
                         <button 
                             type="submit" 
                             className="login__submit"
@@ -142,51 +149,68 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    {/* Divider */}
-                    <div className="login__divider">
-                        <span>Hoặc tiếp tục với</span>
-                    </div>
-
-                    {/* Social Login */}
-                    <div className="login__social">
-                        <button className="login__social-btn login__social-btn--google">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032 c0-3.331,2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.461,2.268,15.365,1,12.545,1 C6.777,1,2,5.777,2,11.545c0,5.768,4.777,10.545,10.545,10.545c6.134,0,10.216-4.335,10.216-10.452c0-0.612-0.053-1.210-0.149-1.804 H12.545z"/>
-                            </svg>
-                            Google
-                        </button>
-                        <button className="login__social-btn login__social-btn--facebook">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                            </svg>
-                            Facebook
-                        </button>
-                    </div>
-
-                    {/* Sign Up Link */}
                     <div className="login__footer">
-                        <p>Chưa có tài khoản? <Link to="/signup" className="login__link">Đăng ký ngay</Link></p>
+                        <p>
+                            Chưa có tài khoản? 
+                            <Link to="/signup" className="login__link"> Đăng ký ngay</Link>
+                        </p>
                     </div>
                 </div>
 
-                {/* Right Side - Illustration */}
+                {/* RIGHT - AUTO CAROUSEL */}
                 <div className="login__illustration">
                     <div className="login__illustration-box">
-                        <div className="login__illustration-content">
-                            <div className="login__illustration-icon">
-                                <FiLock size={64} />
+                        <div className="prod_view">
+
+                            <div className="prod_view-carousel">
+                                <div className="prod_view-content-item" key={activeIndex}>
+                                    <div className="fade-in">
+                                        {activeIndex === 0 && (
+                                            <>
+                                                <h2>Sản phẩm mới</h2>
+                                                <p>Cập nhật xu hướng liên tục mỗi ngày.</p>
+                                            </>
+                                        )}
+                                        {activeIndex === 1 && (
+                                            <>
+                                                <h2>Giá tốt</h2>
+                                                <p>Cam kết giá cạnh tranh nhất thị trường.</p>
+                                            </>
+                                        )}
+                                        {activeIndex === 2 && (
+                                            <>
+                                                <h2>Giao nhanh</h2>
+                                                <p>Nhận hàng ngay trong vòng 2h làm việc.</p>
+                                            </>
+                                        )}
+                                        {activeIndex === 3 && (
+                                            <>
+                                                <h2>Hỗ trợ 24/7</h2>
+                                                <p>Đội ngũ tư vấn tận tâm mọi lúc mọi nơi.</p>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <h2>Bảo mật tài khoản</h2>
-                            <p>Đăng nhập để truy cập tài khoản và quản lý đơn hàng của bạn</p>
-                            <ul className="login__benefits">
-                                <li>✓ Quản lý đơn hàng</li>
-                                <li>✓ Lưu địa chỉ</li>
-                                <li>✓ Nhận khuyến mãi</li>
-                                <li>✓ Tích lũy điểm thưởng</li>
-                            </ul>
+
+                            <div className="prod_view-multiview">
+                                <ul className="prod_view-multiview-list">
+                                    {[0, 1, 2, 3].map((_, index) => (
+                                        <li 
+                                            key={index}
+                                            className={`prod_view-multiview-item ${activeIndex === index ? 'is-active' : ''}`} 
+                                            onClick={() => setActiveIndex(index)}   // 👈 CLICK HERE
+                                        >
+                                            <div className="thumb-dot"></div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     );

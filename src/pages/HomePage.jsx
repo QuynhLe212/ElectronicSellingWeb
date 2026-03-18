@@ -176,20 +176,6 @@ export default function HomePage() {
                     </div>
                 </div>
             </section>
-
-            {/* ===== ĐĂNG KÝ NHẬN TIN ===== */}
-            <section className="newsletter">
-                <div className="container newsletter__inner">
-                    <div className="newsletter__content">
-                        <h2 className="newsletter__title">Luôn cập nhật</h2>
-                        <p className="newsletter__text">Đăng ký nhận ưu đãi độc quyền, quyền truy cập sớm vào sản phẩm mới và tin tức công nghệ gửi đến hộp thư của bạn.</p>
-                    </div>
-                    <form className="newsletter__form" onSubmit={(e) => e.preventDefault()}>
-                        <input type="email" placeholder="Nhập địa chỉ email của bạn" className="newsletter__input" />
-                        <button type="submit" className="btn btn-accent btn-lg">Đăng ký</button>
-                    </form>
-                </div>
-            </section>
         </div>
     );
 }
