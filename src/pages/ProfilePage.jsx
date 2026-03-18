@@ -1,30 +1,19 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FiUser,
   FiPackage,
   FiMapPin,
-  FiHeart,
   FiSettings,
   FiLogOut,
   FiEdit2,
   FiPhone,
   FiMail,
   FiCalendar,
-  FiAward,
-  FiStar,
   FiChevronRight,
-  FiPlus,
-  FiTrash2,
-  FiEye,
-  FiShoppingCart,
-  FiTruck,
-  FiCheckCircle,
-  FiXCircle,
-  FiClock,
 } from "react-icons/fi";
-import ProductCard from "../components/ProductCard";
-import { mockUser, mockOrders, mockAddresses, products } from "../data/data";
+import { clearSession, getMe, updateMyProfile } from "../services/authService";
+import { mockUser } from "../data/data";
 import "./ProfilePage.css";
 
 function formatVND(price) {
@@ -35,28 +24,48 @@ const tabs = [
   { id: "overview", label: "Tổng quan", icon: <FiUser size={18} /> },
   { id: "orders", label: "Đơn hàng", icon: <FiPackage size={18} /> },
   { id: "addresses", label: "Địa chỉ", icon: <FiMapPin size={18} /> },
-  { id: "wishlist", label: "Yêu thích", icon: <FiHeart size={18} /> },
   { id: "settings", label: "Cài đặt", icon: <FiSettings size={18} /> },
   { id: "admin", label: "Admin", icon: <FiSettings size={18} /> },
 ];
 
-const orderStatusIcon = {
-  delivered: <FiCheckCircle size={16} />,
-  shipping: <FiTruck size={16} />,
-  processing: <FiClock size={16} />,
-  cancelled: <FiXCircle size={16} />,
-};
+function splitName(fullName = "") {
+  const safeName = fullName.trim();
+  if (!safeName) return { firstName: "", lastName: "" };
+  const parts = safeName.split(/\s+/);
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+function formatMemberSince(dateString) {
+  if (!dateString) return mockUser.memberSince;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return mockUser.memberSince;
+  return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
+}
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
-  const [orderFilter, setOrderFilter] = useState("all");
   const [editingProfile, setEditingProfile] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState({ type: "", text: "" });
+  const [userInfo, setUserInfo] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    role: "user",
+    createdAt: "",
+    avatarUrl: mockUser.avatar,
+  });
   const [profileData, setProfileData] = useState({
-    firstName: mockUser.firstName,
-    lastName: mockUser.lastName,
-    email: mockUser.email,
-    phone: mockUser.phone,
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
   });
   const [settings, setSettings] = useState({
     emailNotif: true,
@@ -65,22 +74,89 @@ export default function ProfilePage() {
     orderNotif: true,
   });
 
-  const wishlistProducts = products.slice(2, 6);
+  const userDisplayName = useMemo(() => {
+    const combined = `${profileData.firstName} ${profileData.lastName}`.trim();
+    return combined || userInfo.name || "Người dùng";
+  }, [profileData.firstName, profileData.lastName, userInfo.name]);
 
-  const filteredOrders =
-    orderFilter === "all"
-      ? mockOrders
-      : mockOrders.filter((o) => o.status === orderFilter);
+  useEffect(() => {
+    const token = localStorage.getItem("user_token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        setIsProfileLoading(true);
+        const data = await getMe();
+        const user = data?.user;
+        if (!user) {
+          throw new Error("Không lấy được thông tin người dùng.");
+        }
+
+        const parsedName = splitName(user.name);
+        setUserInfo({
+          name: user.name || "",
+          email: user.email || "",
+          phone: user.phone || "",
+          role: user.role || "user",
+          createdAt: user.createdAt || "",
+          avatarUrl: user?.avatar?.url || mockUser.avatar,
+        });
+        setProfileData({
+          firstName: parsedName.firstName,
+          lastName: parsedName.lastName,
+          email: user.email || "",
+          phone: user.phone || "",
+        });
+      } catch (error) {
+        clearSession();
+        navigate("/login");
+      } finally {
+        setIsProfileLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [navigate]);
 
   const updateProfile = (field, value) => {
     setProfileData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleSaveProfile = async () => {
+    const fullName = `${profileData.firstName} ${profileData.lastName}`.trim();
+    if (!fullName) {
+      setProfileMessage({ type: "error", text: "Họ tên không được để trống." });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setProfileMessage({ type: "", text: "" });
+      const response = await updateMyProfile({
+        name: fullName,
+        phone: profileData.phone,
+      });
+
+      const updatedUser = response?.user;
+      setUserInfo((prev) => ({
+        ...prev,
+        name: updatedUser?.name || fullName,
+        phone: updatedUser?.phone || profileData.phone,
+      }));
+      setEditingProfile(false);
+      setProfileMessage({ type: "success", text: "Cập nhật thông tin thành công." });
+    } catch (error) {
+      setProfileMessage({ type: "error", text: error.message || "Cập nhật thất bại." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleLogout = () => {
-    // Xóa dữ liệu phiên làm việc
-    localStorage.removeItem("user_token");
-    localStorage.removeItem("user_email");
-    localStorage.removeItem("user_name");
+    clearSession();
 
     // Điều hướng về trang đăng nhập
     navigate("/login");
@@ -95,7 +171,7 @@ export default function ProfilePage() {
           <div className="profile__header-content">
             <div className="profile__avatar-wrap">
               <img
-                src={mockUser.avatar}
+                src={userInfo.avatarUrl}
                 alt="Avatar"
                 className="profile__avatar"
               />
@@ -104,26 +180,21 @@ export default function ProfilePage() {
               </button>
             </div>
             <div className="profile__header-info">
-              <h1 className="profile__name">
-                {mockUser.firstName} {mockUser.lastName}
-              </h1>
+              <h1 className="profile__name">{userDisplayName}</h1>
               <div className="profile__meta">
                 <span>
-                  <FiMail size={14} /> {mockUser.email}
+                  <FiMail size={14} /> {userInfo.email || profileData.email}
                 </span>
                 <span>
-                  <FiPhone size={14} /> {mockUser.phone}
+                  <FiPhone size={14} /> {userInfo.phone || profileData.phone || "Chưa cập nhật"}
                 </span>
                 <span>
-                  <FiCalendar size={14} /> Thành viên từ {mockUser.memberSince}
+                  <FiCalendar size={14} /> Thành viên từ {formatMemberSince(userInfo.createdAt)}
                 </span>
               </div>
               <div className="profile__badges">
                 <span className="profile__tier-badge">
-                  <FiAward size={14} /> Hạng {mockUser.tier}
-                </span>
-                <span className="profile__points-badge">
-                  <FiStar size={14} /> {mockUser.points.toLocaleString()} điểm
+                  Vai trò: {userInfo.role === "admin" ? "Quản trị viên" : "Người dùng"}
                 </span>
               </div>
             </div>
@@ -132,24 +203,16 @@ export default function ProfilePage() {
           {/* Stats */}
           <div className="profile__stats">
             <div className="profile__stat">
-              <span className="profile__stat-num">{mockUser.totalOrders}</span>
+              <span className="profile__stat-num">0</span>
               <span className="profile__stat-label">Đơn hàng</span>
             </div>
             <div className="profile__stat">
-              <span className="profile__stat-num">
-                {wishlistProducts.length}
-              </span>
-              <span className="profile__stat-label">Yêu thích</span>
-            </div>
-            <div className="profile__stat">
-              <span className="profile__stat-num">
-                {formatVND(mockUser.totalSpent)}
-              </span>
-              <span className="profile__stat-label">Tổng chi tiêu</span>
-            </div>
-            <div className="profile__stat">
-              <span className="profile__stat-num">{mockAddresses.length}</span>
+              <span className="profile__stat-num">0</span>
               <span className="profile__stat-label">Địa chỉ</span>
+            </div>
+            <div className="profile__stat">
+              <span className="profile__stat-num">{formatVND(0)}</span>
+              <span className="profile__stat-label">Tổng chi tiêu</span>
             </div>
           </div>
         </div>
@@ -165,7 +228,9 @@ export default function ProfilePage() {
                   className={`profile__nav-btn ${activeTab === tab.id ? "profile__nav-btn--active" : ""}`}
                   onClick={() => {
                     if (tab.id === "admin") {
-                      navigate("/admin");
+                      if (userInfo.role === "admin") {
+                        navigate("/admin");
+                      }
                     } else {
                       setActiveTab(tab.id);
                     }
@@ -188,6 +253,14 @@ export default function ProfilePage() {
 
           {/* Main Content */}
           <main className="profile__main">
+            {isProfileLoading && (
+              <div className="profile__section">
+                <p>Đang tải thông tin tài khoản...</p>
+              </div>
+            )}
+
+            {!isProfileLoading && (
+              <>
             {/* ===== TỔNG QUAN ===== */}
             {activeTab === "overview" && (
               <div className="profile__section">
@@ -202,6 +275,11 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="profile__info-card">
+                  {profileMessage.text && (
+                    <p style={{ color: profileMessage.type === "error" ? "#d32f2f" : "#2e7d32", marginBottom: "12px" }}>
+                      {profileMessage.text}
+                    </p>
+                  )}
                   {editingProfile ? (
                     <div className="profile__edit-form">
                       <div className="profile__edit-row">
@@ -229,9 +307,7 @@ export default function ProfilePage() {
                         <input
                           type="email"
                           value={profileData.email}
-                          onChange={(e) =>
-                            updateProfile("email", e.target.value)
-                          }
+                          disabled
                         />
                       </div>
                       <div className="profile__edit-field">
@@ -247,9 +323,10 @@ export default function ProfilePage() {
                       <div className="profile__edit-actions">
                         <button
                           className="btn btn-accent btn-sm"
-                          onClick={() => setEditingProfile(false)}
+                          onClick={handleSaveProfile}
+                          disabled={isSaving}
                         >
-                          Lưu thay đổi
+                          {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
                         </button>
                         <button
                           className="btn btn-outline btn-sm"
@@ -286,60 +363,21 @@ export default function ProfilePage() {
                           Thành viên từ
                         </span>
                         <span className="profile__info-value">
-                          {mockUser.memberSince}
+                          {formatMemberSince(userInfo.createdAt)}
                         </span>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Đơn hàng gần đây */}
-                <div
-                  className="profile__section-header"
-                  style={{ marginTop: "32px" }}
-                >
-                  <h2>Đơn hàng gần đây</h2>
-                  <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => setActiveTab("orders")}
-                  >
-                    Xem tất cả <FiChevronRight size={14} />
-                  </button>
-                </div>
-
-                <div className="profile__recent-orders">
-                  {mockOrders.slice(0, 2).map((order) => (
-                    <div key={order.id} className="profile__order-mini">
-                      <div className="profile__order-mini-left">
-                        <div className="profile__order-mini-images">
-                          {order.items.slice(0, 3).map((item, i) => (
-                            <img
-                              key={i}
-                              src={item.image}
-                              alt={item.product}
-                              className="profile__order-mini-img"
-                            />
-                          ))}
-                        </div>
-                        <div>
-                          <strong>#{order.id}</strong>
-                          <span className="profile__order-mini-date">
-                            {order.date}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="profile__order-mini-right">
-                        <span
-                          className={`profile__order-status profile__order-status--${order.status}`}
-                        >
-                          {orderStatusIcon[order.status]} {order.statusLabel}
-                        </span>
-                        <strong>{formatVND(order.total)}</strong>
-                      </div>
-                    </div>
-                  ))}
+                <div className="profile__empty" style={{ marginTop: "24px" }}>
+                  <FiPackage size={40} />
+                  <p>Chưa có đơn hàng</p>
                 </div>
               </div>
+            )}
+
+              </>
             )}
 
             {/* ===== ĐƠN HÀNG ===== */}
@@ -349,80 +387,9 @@ export default function ProfilePage() {
                   <h2>Đơn hàng của tôi</h2>
                 </div>
 
-                <div className="profile__order-filters">
-                  {[
-                    { id: "all", label: "Tất cả" },
-                    { id: "shipping", label: "Đang giao" },
-                    { id: "delivered", label: "Đã giao" },
-                    { id: "cancelled", label: "Đã hủy" },
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      className={`profile__order-filter ${orderFilter === f.id ? "profile__order-filter--active" : ""}`}
-                      onClick={() => setOrderFilter(f.id)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="profile__orders-list">
-                  {filteredOrders.length > 0 ? (
-                    filteredOrders.map((order) => (
-                      <div key={order.id} className="profile__order-card">
-                        <div className="profile__order-header">
-                          <div className="profile__order-id">
-                            <strong>Đơn hàng #{order.id}</strong>
-                            <span>{order.date}</span>
-                          </div>
-                          <span
-                            className={`profile__order-status profile__order-status--${order.status}`}
-                          >
-                            {orderStatusIcon[order.status]} {order.statusLabel}
-                          </span>
-                        </div>
-                        <div className="profile__order-items">
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="profile__order-item">
-                              <img src={item.image} alt={item.product} />
-                              <div className="profile__order-item-info">
-                                <p>{item.product}</p>
-                                <span>x{item.qty}</span>
-                              </div>
-                              <span className="profile__order-item-price">
-                                {formatVND(item.price)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="profile__order-footer">
-                          <div className="profile__order-total">
-                            Tổng: <strong>{formatVND(order.total)}</strong>
-                          </div>
-                          <div className="profile__order-actions">
-                            <button className="btn btn-outline btn-sm">
-                              <FiEye size={14} /> Chi tiết
-                            </button>
-                            {order.status === "delivered" && (
-                              <button className="btn btn-primary btn-sm">
-                                <FiShoppingCart size={14} /> Mua lại
-                              </button>
-                            )}
-                            {order.status === "shipping" && (
-                              <button className="btn btn-primary btn-sm">
-                                <FiTruck size={14} /> Theo dõi
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="profile__empty">
-                      <FiPackage size={48} />
-                      <p>Không có đơn hàng nào</p>
-                    </div>
-                  )}
+                <div className="profile__empty">
+                  <FiPackage size={48} />
+                  <p>Chưa có dữ liệu đơn hàng.</p>
                 </div>
               </div>
             )}
@@ -432,85 +399,12 @@ export default function ProfilePage() {
               <div className="profile__section">
                 <div className="profile__section-header">
                   <h2>Sổ địa chỉ</h2>
-                  <button className="btn btn-primary btn-sm">
-                    <FiPlus size={14} /> Thêm địa chỉ
-                  </button>
                 </div>
 
-                <div className="profile__addresses">
-                  {mockAddresses.map((addr) => (
-                    <div
-                      key={addr.id}
-                      className={`profile__address-card ${addr.isDefault ? "profile__address-card--default" : ""}`}
-                    >
-                      <div className="profile__address-header">
-                        <span className="profile__address-label">
-                          {addr.label === "Nhà riêng" ? "🏠" : "🏢"}{" "}
-                          {addr.label}
-                        </span>
-                        {addr.isDefault && (
-                          <span className="profile__address-default">
-                            Mặc định
-                          </span>
-                        )}
-                      </div>
-                      <div className="profile__address-body">
-                        <p className="profile__address-name">{addr.name}</p>
-                        <p>{addr.phone}</p>
-                        <p>{addr.address}</p>
-                        <p>
-                          {addr.district}, {addr.city}
-                        </p>
-                      </div>
-                      <div className="profile__address-actions">
-                        <button className="profile__address-btn">
-                          <FiEdit2 size={14} /> Sửa
-                        </button>
-                        {!addr.isDefault && (
-                          <>
-                            <button className="profile__address-btn profile__address-btn--default">
-                              Đặt mặc định
-                            </button>
-                            <button className="profile__address-btn profile__address-btn--delete">
-                              <FiTrash2 size={14} /> Xóa
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Thêm địa chỉ mới */}
-                  <button className="profile__address-add">
-                    <FiPlus size={24} />
-                    <span>Thêm địa chỉ mới</span>
-                  </button>
+                <div className="profile__empty">
+                  <FiMapPin size={48} />
+                  <p>Chưa có dữ liệu địa chỉ.</p>
                 </div>
-              </div>
-            )}
-
-            {/* ===== YÊU THÍCH ===== */}
-            {activeTab === "wishlist" && (
-              <div className="profile__section">
-                <div className="profile__section-header">
-                  <h2>Sản phẩm yêu thích ({wishlistProducts.length})</h2>
-                </div>
-
-                {wishlistProducts.length > 0 ? (
-                  <div className="profile__wishlist-grid">
-                    {wishlistProducts.map((product) => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="profile__empty">
-                    <FiHeart size={48} />
-                    <p>Chưa có sản phẩm yêu thích</p>
-                    <Link to="/products" className="btn btn-primary">
-                      Khám phá sản phẩm
-                    </Link>
-                  </div>
-                )}
               </div>
             )}
 

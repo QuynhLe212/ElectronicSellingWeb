@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FiUser, FiMail, FiLock, FiPhone, FiEye, FiEyeOff } from 'react-icons/fi';
+import { register } from '../services/authService';
 import './SignUpPage.css';
 
 export default function SignUpPage() {
@@ -44,10 +45,10 @@ export default function SignUpPage() {
 
         if (!formData.password) {
             newErrors.password = 'Mật khẩu không được để trống';
-        } else if (formData.password.length < 8) {
-            newErrors.password = 'Mật khẩu phải ít nhất 8 ký tự';
-        } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-            newErrors.password = 'Mật khẩu phải chứa chữ hoa, chữ thường và số';
+        } else if (formData.password.length < 6) {
+            newErrors.password = 'Mật khẩu phải ít nhất 6 ký tự';
+        } else if (!/\d/.test(formData.password)) {
+            newErrors.password = 'Mật khẩu phải chứa ít nhất 1 số';
         }
 
         if (!formData.confirmPassword) {
@@ -84,16 +85,23 @@ export default function SignUpPage() {
         }
 
         setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            // Save user session
-            localStorage.setItem('user_token', 'fake-token-' + Date.now());
-            localStorage.setItem('user_email', formData.email);
-            localStorage.setItem('user_name', `${formData.firstName} ${formData.lastName}`);
+        try {
+            await register({
+                name: `${formData.firstName} ${formData.lastName}`.trim(),
+                email: formData.email,
+                phone: formData.phone,
+                password: formData.password,
+            });
+
             setIsLoading(false);
-            // Redirect to profile page
             navigate('/profile');
-        }, 1000);
+        } catch (error) {
+            setIsLoading(false);
+            setErrors((prev) => ({
+                ...prev,
+                submit: error.message || 'Đăng ký thất bại. Vui lòng thử lại.',
+            }));
+        }
     };
 
     return (
@@ -126,6 +134,8 @@ export default function SignUpPage() {
                     </div>
 
                     <form className="signup__form" onSubmit={handleSubmit}>
+                        {errors.submit && <span className="signup__error">{errors.submit}</span>}
+
                         {/* Name Fields */}
                         <div className="signup__row">
                             <div className="signup__field">

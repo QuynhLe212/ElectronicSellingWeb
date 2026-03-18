@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import { login } from '../services/authService';
 import './LoginPage.css';
 
 export default function LoginPage() {
@@ -63,12 +64,28 @@ export default function LoginPage() {
         }
 
         setIsLoading(true);
-        setTimeout(() => {
-            localStorage.setItem('user_token', 'fake-token-' + Date.now());
-            localStorage.setItem('user_email', formData.email);
+        try {
+            const response = await login({
+                email: formData.email,
+                password: formData.password,
+            });
+
+            const role = response?.user?.role;
             setIsLoading(false);
+
+            if (role === 'admin') {
+                navigate('/admin');
+                return;
+            }
+
             navigate('/profile');
-        }, 1000);
+        } catch (error) {
+            setIsLoading(false);
+            setErrors((prev) => ({
+                ...prev,
+                submit: error.message || 'Đăng nhập thất bại. Vui lòng thử lại.',
+            }));
+        }
     };
 
     return (
@@ -83,8 +100,9 @@ export default function LoginPage() {
                     </div>
 
                     <form className="login__form" onSubmit={handleSubmit}>
-                        
-                        {/* Email */}
+                        {errors.submit && <span className="login__error">{errors.submit}</span>}
+
+                        {/* Email Field */}
                         <div className="login__field">
                             <label className="login__label">Email</label>
                             <div className="login__input-wrapper">
