@@ -1,11 +1,58 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
-import { mockOrders } from "../data/data";
+import {
+  deleteOrder,
+  getOrderById,
+  getOrdersAdmin,
+  updateOrderStatus,
+} from "../services/ordersService";
 
 export default function AdminOrders() {
+  const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadOrders = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
+        const response = await getOrdersAdmin();
+        if (ignore) return;
+        setOrders(Array.isArray(response) ? response : []);
+      } catch (error) {
+        if (ignore) return;
+        setErrorMessage(error.message || "Không thể tải đơn hàng.");
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadOrders();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const formatPrice = (price) => price.toLocaleString("vi-VN") + "₫";
+
+  const statusLabelMap = {
+    pending: "Chờ xử lý",
+    shipping: "Đang giao",
+    delivered: "Đã giao",
+    cancelled: "Đã hủy",
+  };
+
+  const getStatusLabel = (order) => {
+    const status = order?.status;
+    return statusLabelMap[status] || order?.statusLabel || "Chờ xử lý";
+  };
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -20,12 +67,64 @@ export default function AdminOrders() {
     }
   };
 
+  const handleViewOrder = async (order) => {
+    try {
+      const detail = await getOrderById(order.id || order._id);
+      setSelectedOrder(detail || order);
+    } catch (error) {
+      setSelectedOrder(order);
+    }
+  };
+
+  const handleUpdateStatus = async (orderId, status) => {
+    try {
+      const updated = await updateOrderStatus(orderId, { status });
+      setOrders((prev) =>
+        prev.map((o) =>
+          (o.id || o._id) === orderId
+            ? {
+                ...o,
+                ...updated,
+                status,
+                statusLabel: updated?.statusLabel || o.statusLabel,
+              }
+            : o,
+        ),
+      );
+
+      setSelectedOrder((prev) =>
+        prev && (prev.id || prev._id) === orderId
+          ? { ...prev, ...updated, status, statusLabel: updated?.statusLabel || prev.statusLabel }
+          : prev,
+      );
+    } catch (error) {
+      alert(error.message || "Không thể cập nhật trạng thái đơn hàng.");
+    }
+  };
+
+  const handleDeleteOrder = async (orderId) => {
+    if (!window.confirm("Bạn có chắc muốn xóa đơn hàng này?")) return;
+
+    try {
+      await deleteOrder(orderId);
+      setOrders((prev) => prev.filter((o) => (o.id || o._id) !== orderId));
+      if (selectedOrder && (selectedOrder.id || selectedOrder._id) === orderId) {
+        setSelectedOrder(null);
+      }
+    } catch (error) {
+      alert(error.message || "Không thể xóa đơn hàng.");
+    }
+  };
+
   return (
     <div className="admin">
       <AdminSidebar />
 
       <div className="admin__content">
         <h1 className="admin__title">Quản lý đơn hàng</h1>
+
+        {isLoading && <p>Đang tải đơn hàng...</p>}
+        {errorMessage && <p style={{ color: "var(--danger)" }}>{errorMessage}</p>}
 
         <div className="admin__card">
           <table className="admin__table">
@@ -36,30 +135,41 @@ export default function AdminOrders() {
                 <th>Trạng thái</th>
                 <th>Tổng tiền</th>
                 <th>Chi tiết</th>
+                <th>Xóa</th>
               </tr>
             </thead>
 
             <tbody>
-              {mockOrders.map((order) => (
-                <tr key={order.id}>
-                  <td className="order-id">{order.id}</td>
+              {orders.map((order) => (
+                <tr key={order.id || order._id}>
+                  <td className="order-id">{order.id || order._id}</td>
 
-                  <td>{order.date}</td>
+                  <td>
+                    {order.createdAt
+                      ? new Date(order.createdAt).toLocaleDateString("vi-VN")
+                      : order.date}
+                  </td>
 
                   <td>
                     <span className={getStatusClass(order.status)}>
-                      {order.statusLabel}
+                      {getStatusLabel(order)}
                     </span>
                   </td>
 
-                  <td className="order-price">{formatPrice(order.total)}</td>
+                  <td className="order-price">{formatPrice(Number(order.total || order.totalPrice || 0))}</td>
 
                   <td>
                     <button
                       className="btn-view"
-                      onClick={() => setSelectedOrder(order)}
+                      onClick={() => handleViewOrder(order)}
                     >
                       Xem
+                    </button>
+                  </td>
+
+                  <td>
+                    <button className="btn-view" onClick={() => handleDeleteOrder(order.id || order._id)}>
+                      Xóa
                     </button>
                   </td>
                 </tr>
@@ -99,9 +209,22 @@ export default function AdminOrders() {
 
                 <div>
                   <span>Trạng thái</span>
-                  <span className={getStatusClass(selectedOrder.status)}>
-                    {selectedOrder.statusLabel}
-                  </span>
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    <span className={getStatusClass(selectedOrder.status)}>
+                      {getStatusLabel(selectedOrder)}
+                    </span>
+                    <select
+                      value={selectedOrder.status || ""}
+                      onChange={(e) =>
+                        handleUpdateStatus(selectedOrder.id || selectedOrder._id, e.target.value)
+                      }
+                    >
+                      <option value="pending">Chờ xử lý</option>
+                      <option value="shipping">Đang giao</option>
+                      <option value="delivered">Đã giao</option>
+                      <option value="cancelled">Đã hủy</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -110,14 +233,14 @@ export default function AdminOrders() {
               <h3 className="order-product-title">Sản phẩm</h3>
 
               <div className="order-items">
-                {selectedOrder.items.map((item, index) => (
+                {(selectedOrder.items || selectedOrder.orderItems || []).map((item, index) => (
                   <div className="order-item" key={index}>
                     <img src={item.image} alt="" />
 
                     <div className="order-item-info">
-                      <p className="item-name">{item.product}</p>
+                      <p className="item-name">{item.product || item.name}</p>
 
-                      <p className="item-qty">Số lượng: {item.qty}</p>
+                      <p className="item-qty">Số lượng: {item.qty || item.quantity}</p>
                     </div>
 
                     <div className="item-price">{formatPrice(item.price)}</div>
@@ -130,7 +253,7 @@ export default function AdminOrders() {
               <div className="order-total-box">
                 <span>Tổng tiền</span>
 
-                <b>{formatPrice(selectedOrder.total)}</b>
+                <b>{formatPrice(Number(selectedOrder.total || selectedOrder.totalPrice || 0))}</b>
               </div>
             </div>
           </div>

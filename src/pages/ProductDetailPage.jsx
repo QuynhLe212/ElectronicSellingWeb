@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { FiShoppingCart, FiHeart, FiShare2, FiTruck, FiRefreshCw, FiShield, FiCheck, FiMinus, FiPlus, FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import StarRating from '../components/StarRating';
 import ProductCard from '../components/ProductCard';
 import { products, reviews } from '../data/data';
+import { addProductReview, getProductById, getTopRatedProducts } from '../services/productsService';
 import './ProductDetailPage.css';
 
 const categoryNameMap = {
@@ -21,8 +22,69 @@ function formatVND(price) {
 
 export default function ProductDetailPage() {
     const { id } = useParams();
-    const product = products.find((p) => p.id === parseInt(id)) || products[0];
-    const productReviews = reviews.filter((r) => r.productId === product.id);
+    const fallbackProduct = products.find((p) => p.id === parseInt(id, 10)) || products[0];
+    const [product, setProduct] = useState(fallbackProduct);
+    const [relatedPool, setRelatedPool] = useState(products);
+    const [isLoading, setIsLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
+    const [reviewMessage, setReviewMessage] = useState({ type: '', text: '' });
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+
+    const productReviews = useMemo(() => {
+        const apiReviews = product?.reviews;
+        if (Array.isArray(apiReviews) && apiReviews.length > 0) {
+            return apiReviews.map((r, index) => ({
+                id: r.id || r._id || index,
+                user: r.user?.name || r.userName || 'Khách hàng',
+                rating: Number(r.rating || 0),
+                date: r.createdAt
+                    ? new Date(r.createdAt).toLocaleDateString('vi-VN')
+                    : (r.date || new Date().toLocaleDateString('vi-VN')),
+                comment: r.comment || '',
+            }));
+        }
+
+        return reviews.filter((r) => r.productId === product.id);
+    }, [product]);
+
+    useEffect(() => {
+        let ignore = false;
+
+        const loadProduct = async () => {
+            try {
+                setIsLoading(true);
+                setErrorMessage('');
+
+                const [productDetail, topRated] = await Promise.all([
+                    getProductById(id),
+                    getTopRatedProducts(),
+                ]);
+
+                if (ignore) return;
+                if (productDetail) {
+                    setProduct(productDetail);
+                }
+                if (topRated.length > 0) {
+                    setRelatedPool(topRated);
+                }
+            } catch (error) {
+                if (ignore) return;
+                setErrorMessage(error.message || 'Không thể tải chi tiết sản phẩm.');
+                setProduct(fallbackProduct);
+            } finally {
+                if (!ignore) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        loadProduct();
+
+        return () => {
+            ignore = true;
+        };
+    }, [id]);
 
     const [selectedImage, setSelectedImage] = useState(0);
     const [selectedColor, setSelectedColor] = useState(0);
@@ -34,20 +96,20 @@ export default function ProductDetailPage() {
 
     // Cross-sell: cùng danh mục, sản phẩm khác, sắp xếp theo đánh giá
     const relatedProducts = useMemo(() => {
-        return products
+        return relatedPool
             .filter((p) => p.category === product.category && p.id !== product.id)
             .sort((a, b) => b.rating - a.rating)
             .slice(0, 4);
-    }, [product]);
+    }, [product, relatedPool]);
 
     const crossSellProducts = useMemo(() => {
         if (relatedProducts.length >= 4) return relatedProducts;
-        const extra = products
+        const extra = relatedPool
             .filter((p) => p.id !== product.id && !relatedProducts.includes(p))
             .sort((a, b) => b.rating - a.rating)
             .slice(0, 4 - relatedProducts.length);
         return [...relatedProducts, ...extra];
-    }, [product, relatedProducts]);
+    }, [product, relatedProducts, relatedPool]);
 
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
 
@@ -70,6 +132,37 @@ export default function ProductDetailPage() {
         pct: productReviews.length > 0 ? (productReviews.filter((r) => r.rating === star).length / productReviews.length) * 100 : 0,
     }));
 
+    const handleSubmitReview = async (e) => {
+        e.preventDefault();
+
+        if (!reviewForm.comment.trim()) {
+            setReviewMessage({ type: 'error', text: 'Vui lòng nhập nội dung đánh giá.' });
+            return;
+        }
+
+        try {
+            setIsSubmittingReview(true);
+            setReviewMessage({ type: '', text: '' });
+
+            await addProductReview(product.id, {
+                rating: reviewForm.rating,
+                comment: reviewForm.comment,
+            });
+
+            const refreshedProduct = await getProductById(product.id);
+            if (refreshedProduct) {
+                setProduct(refreshedProduct);
+            }
+
+            setReviewForm({ rating: 5, comment: '' });
+            setReviewMessage({ type: 'success', text: 'Gửi đánh giá thành công.' });
+        } catch (error) {
+            setReviewMessage({ type: 'error', text: error.message || 'Không thể gửi đánh giá.' });
+        } finally {
+            setIsSubmittingReview(false);
+        }
+    };
+
     return (
         <div className="pdp">
             <div className="container">
@@ -85,6 +178,18 @@ export default function ProductDetailPage() {
                 </nav>
 
                 {/* Sản phẩm chính */}
+                {isLoading && (
+                    <div className="pdp__main" style={{ marginBottom: '24px' }}>
+                        <p>Đang tải thông tin sản phẩm...</p>
+                    </div>
+                )}
+
+                {errorMessage && (
+                    <div className="pdp__main" style={{ marginBottom: '24px' }}>
+                        <p style={{ color: 'var(--danger)' }}>{errorMessage}</p>
+                    </div>
+                )}
+
                 <div className="pdp__main">
                     {/* Bộ sưu tập ảnh */}
                     <div className="pdp__gallery">
@@ -297,6 +402,37 @@ export default function ProductDetailPage() {
                                             <p className="pdp__review-text">{rev.comment}</p>
                                         </div>
                                     ))}
+
+                                    <form onSubmit={handleSubmitReview} style={{ marginTop: '20px', display: 'grid', gap: '10px' }}>
+                                        <h4>Viết đánh giá của bạn</h4>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <label htmlFor="reviewRating">Số sao:</label>
+                                            <select
+                                                id="reviewRating"
+                                                value={reviewForm.rating}
+                                                onChange={(e) => setReviewForm((prev) => ({ ...prev, rating: Number(e.target.value) }))}
+                                            >
+                                                {[5, 4, 3, 2, 1].map((star) => (
+                                                    <option key={star} value={star}>{star} sao</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <textarea
+                                            placeholder="Chia sẻ trải nghiệm của bạn..."
+                                            value={reviewForm.comment}
+                                            onChange={(e) => setReviewForm((prev) => ({ ...prev, comment: e.target.value }))}
+                                            rows={4}
+                                            style={{ padding: '10px', border: '1px solid var(--gray-300)', borderRadius: '8px' }}
+                                        />
+                                        {reviewMessage.text && (
+                                            <p style={{ color: reviewMessage.type === 'error' ? 'var(--danger)' : 'var(--success)' }}>
+                                                {reviewMessage.text}
+                                            </p>
+                                        )}
+                                        <button type="submit" className="btn btn-primary btn-sm" disabled={isSubmittingReview}>
+                                            {isSubmittingReview ? 'Đang gửi...' : 'Gửi đánh giá'}
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         )}
