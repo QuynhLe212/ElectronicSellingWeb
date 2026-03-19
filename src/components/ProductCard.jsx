@@ -1,13 +1,35 @@
 import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import { FiShoppingCart, FiHeart } from 'react-icons/fi';
 import StarRating from './StarRating';
+import { isFavorite, toggleFavorite } from '../services/favoritesService';
 import './ProductCard.css';
+
+const PRODUCT_FALLBACK_IMAGE = 'https://picsum.photos/seed/product-fallback/600/600';
 
 function formatVND(price) {
     return price.toLocaleString('vi-VN') + '₫';
 }
 
+function withFallbackImage(event) {
+    const image = event.currentTarget;
+    image.onerror = null;
+    image.src = PRODUCT_FALLBACK_IMAGE;
+}
+
 export default function ProductCard({ product, listView = false }) {
+    const [isFav, setIsFav] = useState(false);
+
+    useEffect(() => {
+        setIsFav(isFavorite(product.id));
+    }, [product.id]);
+
+    const handleToggleFavorite = (e) => {
+        e.preventDefault();
+        toggleFavorite(product.id);
+        setIsFav((prev) => !prev);
+    };
+
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
 
     return (
@@ -18,10 +40,20 @@ export default function ProductCard({ product, listView = false }) {
                         {product.badge === 'sale' ? `-${product.discount}%` : 'Mới'}
                     </span>
                 )}
-                <img src={product.image} alt={product.name} className="product-card__image" loading="lazy" />
+                <img
+                    src={product.image || PRODUCT_FALLBACK_IMAGE}
+                    alt={product.name}
+                    className="product-card__image"
+                    loading="lazy"
+                    onError={withFallbackImage}
+                />
                 <div className="product-card__actions">
-                    <button className="product-card__action-btn" title="Thêm vào yêu thích" onClick={(e) => e.preventDefault()}>
-                        <FiHeart size={18} />
+                    <button
+                        className={`product-card__action-btn ${isFav ? 'product-card__action-btn--active' : ''}`}
+                        title={isFav ? 'Xóa khỏi yêu thích' : 'Thêm vào yêu thích'}
+                        onClick={handleToggleFavorite}
+                    >
+                        <FiHeart size={18} fill={isFav ? 'currentColor' : 'none'} />
                     </button>
                     <button className="product-card__action-btn product-card__action-btn--cart" title="Thêm vào giỏ hàng" onClick={(e) => e.preventDefault()}>
                         <FiShoppingCart size={18} />

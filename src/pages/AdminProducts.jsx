@@ -9,6 +9,21 @@ import {
   updateProduct,
 } from "../services/productsService";
 
+const PRODUCT_FALLBACK_IMAGE = "https://picsum.photos/seed/product-fallback/200/200";
+
+const getImageUrl = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") return value.url || value.src || "";
+  return "";
+};
+
+const withFallbackImage = (event) => {
+  const image = event.currentTarget;
+  image.onerror = null;
+  image.src = PRODUCT_FALLBACK_IMAGE;
+};
+
 export default function AdminProducts() {
   const [productList, setProductList] = useState([]);
   const [search, setSearch] = useState("");
@@ -110,13 +125,14 @@ export default function AdminProducts() {
   };
 
   const openEditForm = (product) => {
+    const firstImage = getImageUrl(product.image) || getImageUrl(product.images?.[0]) || "";
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name || "",
       price: product.price || "",
       brand: product.brand || "",
       category: product.category || "",
-      image: product.image || product.images?.[0] || "",
+      image: firstImage,
     });
     setShowForm(true);
   };
@@ -177,10 +193,11 @@ export default function AdminProducts() {
 
                 <td>
                   <img
-                    src={p.images?.[0] || p.image}
+                    src={getImageUrl(p.images?.[0]) || getImageUrl(p.image) || PRODUCT_FALLBACK_IMAGE}
                     alt={p.name}
                     width="50"
                     style={{ borderRadius: "6px" }}
+                    onError={withFallbackImage}
                   />
                 </td>
 

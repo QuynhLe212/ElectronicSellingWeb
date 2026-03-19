@@ -2,33 +2,38 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiArrowRight, FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 import ProductCard from '../components/ProductCard';
-import { products, categories, partnerBrands } from '../data/data';
-import { getFeaturedProducts, getTopRatedProducts } from '../services/productsService';
+import { products as mockProducts, categories, partnerBrands } from '../data/data';
+import { getFeaturedProducts, getProducts } from '../services/productsService';
 import './HomePage.css';
 
 export default function HomePage() {
-    const [featuredProducts, setFeaturedProducts] = useState(products.slice(0, 8));
-    const [newArrivals, setNewArrivals] = useState(products.filter((p) => p.badge === 'new'));
+    const [featuredProducts, setFeaturedProducts] = useState(mockProducts.slice(0, 8));
+    const [newArrivals, setNewArrivals] = useState(mockProducts.filter((p) => p.badge === 'new').slice(0, 8));
 
     useEffect(() => {
         let ignore = false;
 
         const loadHomeProducts = async () => {
             try {
-                const [featured, topRated] = await Promise.all([
+                const [featured, latestProducts] = await Promise.all([
                     getFeaturedProducts(),
-                    getTopRatedProducts(),
+                    getProducts({
+                        sort: '-createdAt',
+                        page: 1,
+                        limit: 8,
+                    }),
                 ]);
 
                 if (ignore) return;
 
                 if (featured.length > 0) {
                     setFeaturedProducts(featured.slice(0, 8));
+                } else if (latestProducts?.products?.length > 0) {
+                    setFeaturedProducts(latestProducts.products.slice(0, 8));
                 }
 
-                const topRatedNew = topRated.filter((p) => p.badge === 'new');
-                if (topRatedNew.length > 0) {
-                    setNewArrivals(topRatedNew.slice(0, 8));
+                if (latestProducts?.products?.length > 0) {
+                    setNewArrivals(latestProducts.products.slice(0, 8));
                 }
             } catch (error) {
                 // Giữ fallback mock data để trang vẫn hiển thị khi API chưa sẵn sàng.

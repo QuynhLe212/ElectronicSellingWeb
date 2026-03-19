@@ -7,6 +7,8 @@ import { products, reviews } from '../data/data';
 import { addProductReview, getProductById, getTopRatedProducts } from '../services/productsService';
 import './ProductDetailPage.css';
 
+const PRODUCT_FALLBACK_IMAGE = 'https://picsum.photos/seed/product-fallback/1200/1200';
+
 const categoryNameMap = {
     smartphones: 'Điện thoại',
     laptops: 'Laptop',
@@ -18,6 +20,12 @@ const categoryNameMap = {
 
 function formatVND(price) {
     return price.toLocaleString('vi-VN') + '₫';
+}
+
+function withFallbackImage(event) {
+    const image = event.currentTarget;
+    image.onerror = null;
+    image.src = PRODUCT_FALLBACK_IMAGE;
 }
 
 export default function ProductDetailPage() {
@@ -93,6 +101,21 @@ export default function ProductDetailPage() {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [zoomPos, setZoomPos] = useState({ x: 50, y: 50 });
     const [isZooming, setIsZooming] = useState(false);
+
+    const imageList = useMemo(() => {
+        if (!Array.isArray(product?.images)) {
+            return [product?.image || PRODUCT_FALLBACK_IMAGE];
+        }
+
+        const normalized = product.images.filter(Boolean);
+        if (normalized.length === 0) {
+            return [product?.image || PRODUCT_FALLBACK_IMAGE];
+        }
+
+        return normalized;
+    }, [product]);
+
+    const selectedImageSrc = imageList[selectedImage] || imageList[0] || PRODUCT_FALLBACK_IMAGE;
 
     // Cross-sell: cùng danh mục, sản phẩm khác, sắp xếp theo đánh giá
     const relatedProducts = useMemo(() => {
@@ -206,9 +229,10 @@ export default function ProductDetailPage() {
                                 </span>
                             )}
                             <img
-                                src={product.images[selectedImage]}
+                                src={selectedImageSrc}
                                 alt={product.name}
                                 className={`pdp__image ${isZooming ? 'pdp__image--zooming' : ''}`}
+                                onError={withFallbackImage}
                                 style={isZooming ? {
                                     transformOrigin: `${zoomPos.x}% ${zoomPos.y}%`,
                                     transform: 'scale(2)',
@@ -217,13 +241,13 @@ export default function ProductDetailPage() {
                             <span className="pdp__zoom-hint">🔍 Nhấn để phóng to</span>
                         </div>
                         <div className="pdp__thumbnails">
-                            {product.images.map((img, idx) => (
+                            {imageList.map((img, idx) => (
                                 <button
                                     key={idx}
                                     className={`pdp__thumb ${selectedImage === idx ? 'pdp__thumb--active' : ''}`}
                                     onClick={() => setSelectedImage(idx)}
                                 >
-                                    <img src={img} alt={`${product.name} góc nhìn ${idx + 1}`} />
+                                    <img src={img || PRODUCT_FALLBACK_IMAGE} alt={`${product.name} góc nhìn ${idx + 1}`} onError={withFallbackImage} />
                                 </button>
                             ))}
                         </div>
@@ -457,19 +481,20 @@ export default function ProductDetailPage() {
                     <button className="pdp__lightbox-close"><FiX size={24} /></button>
                     <button
                         className="pdp__lightbox-nav pdp__lightbox-prev"
-                        onClick={(e) => { e.stopPropagation(); setSelectedImage((selectedImage - 1 + product.images.length) % product.images.length); }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedImage((selectedImage - 1 + imageList.length) % imageList.length); }}
                     >
                         <FiChevronLeft size={28} />
                     </button>
                     <img
-                        src={product.images[selectedImage]}
+                        src={selectedImageSrc}
                         alt={product.name}
                         className="pdp__lightbox-img"
+                        onError={withFallbackImage}
                         onClick={(e) => e.stopPropagation()}
                     />
                     <button
                         className="pdp__lightbox-nav pdp__lightbox-next"
-                        onClick={(e) => { e.stopPropagation(); setSelectedImage((selectedImage + 1) % product.images.length); }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedImage((selectedImage + 1) % imageList.length); }}
                     >
                         <FiChevronRight size={28} />
                     </button>

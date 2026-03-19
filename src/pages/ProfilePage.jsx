@@ -57,9 +57,12 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [editingProfile, setEditingProfile] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
   const [profileMessage, setProfileMessage] = useState({ type: "", text: "" });
+  const [addressMessage, setAddressMessage] = useState({ type: "", text: "" });
   const [userInfo, setUserInfo] = useState({
     name: "",
     email: "",
@@ -67,12 +70,26 @@ export default function ProfilePage() {
     role: "user",
     createdAt: "",
     avatarUrl: mockUser.avatar,
+    address: {
+      street: "",
+      city: "",
+      district: "",
+      ward: "",
+      zipCode: "",
+    },
   });
   const [profileData, setProfileData] = useState({
     firstName: "",
     lastName: "",
     email: "",
     phone: "",
+  });
+  const [addressData, setAddressData] = useState({
+    street: "",
+    ward: "",
+    district: "",
+    city: "",
+    zipCode: "",
   });
   const [settings, setSettings] = useState({
     emailNotif: true,
@@ -95,6 +112,23 @@ export default function ProfilePage() {
     const combined = `${profileData.firstName} ${profileData.lastName}`.trim();
     return combined || userInfo.name || "Người dùng";
   }, [profileData.firstName, profileData.lastName, userInfo.name]);
+
+  const hasAddress = useMemo(() => (
+    Object.values(addressData).some((value) => String(value || "").trim())
+  ), [addressData]);
+
+  const formattedAddress = useMemo(() => {
+    return [
+      addressData.street,
+      addressData.ward,
+      addressData.district,
+      addressData.city,
+      addressData.zipCode,
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(", ");
+  }, [addressData]);
 
   useEffect(() => {
     const token = localStorage.getItem("user_token");
@@ -120,12 +154,26 @@ export default function ProfilePage() {
           role: user.role || "user",
           createdAt: user.createdAt || "",
           avatarUrl: user?.avatar?.url || mockUser.avatar,
+          address: {
+            street: user?.address?.street || "",
+            city: user?.address?.city || "",
+            district: user?.address?.district || "",
+            ward: user?.address?.ward || "",
+            zipCode: user?.address?.zipCode || "",
+          },
         });
         setProfileData({
           firstName: parsedName.firstName,
           lastName: parsedName.lastName,
           email: user.email || "",
           phone: user.phone || "",
+        });
+        setAddressData({
+          street: user?.address?.street || "",
+          ward: user?.address?.ward || "",
+          district: user?.address?.district || "",
+          city: user?.address?.city || "",
+          zipCode: user?.address?.zipCode || "",
         });
 
         try {
@@ -151,6 +199,10 @@ export default function ProfilePage() {
 
   const updateProfile = (field, value) => {
     setProfileData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateAddress = (field, value) => {
+    setAddressData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSaveProfile = async () => {
@@ -191,6 +243,52 @@ export default function ProfilePage() {
     } finally {
       clearSession();
       navigate("/login");
+    }
+  };
+
+  const handleSaveAddress = async () => {
+    const normalizedAddress = {
+      street: String(addressData.street || "").trim(),
+      ward: String(addressData.ward || "").trim(),
+      district: String(addressData.district || "").trim(),
+      city: String(addressData.city || "").trim(),
+      zipCode: String(addressData.zipCode || "").trim(),
+    };
+
+    if (!Object.values(normalizedAddress).some(Boolean)) {
+      setAddressMessage({ type: "error", text: "Vui lòng nhập ít nhất một thông tin địa chỉ." });
+      return;
+    }
+
+    try {
+      setIsSavingAddress(true);
+      setAddressMessage({ type: "", text: "" });
+      const response = await updateMyProfile({ address: normalizedAddress });
+      const updatedAddress = response?.user?.address || normalizedAddress;
+
+      setAddressData({
+        street: updatedAddress.street || "",
+        ward: updatedAddress.ward || "",
+        district: updatedAddress.district || "",
+        city: updatedAddress.city || "",
+        zipCode: updatedAddress.zipCode || "",
+      });
+      setUserInfo((prev) => ({
+        ...prev,
+        address: {
+          street: updatedAddress.street || "",
+          ward: updatedAddress.ward || "",
+          district: updatedAddress.district || "",
+          city: updatedAddress.city || "",
+          zipCode: updatedAddress.zipCode || "",
+        },
+      }));
+      setEditingAddress(false);
+      setAddressMessage({ type: "success", text: "Đã cập nhật địa chỉ thành công." });
+    } catch (error) {
+      setAddressMessage({ type: "error", text: error.message || "Không thể cập nhật địa chỉ." });
+    } finally {
+      setIsSavingAddress(false);
     }
   };
 
@@ -284,7 +382,7 @@ export default function ProfilePage() {
               <span className="profile__stat-label">Đơn hàng</span>
             </div>
             <div className="profile__stat">
-              <span className="profile__stat-num">0</span>
+              <span className="profile__stat-num">{hasAddress ? 1 : 0}</span>
               <span className="profile__stat-label">Địa chỉ</span>
             </div>
             <div className="profile__stat">
@@ -299,7 +397,9 @@ export default function ProfilePage() {
           {/* Sidebar */}
           <aside className="profile__sidebar">
             <nav className="profile__nav">
-              {tabs.map((tab) => (
+              {tabs
+                .filter((tab) => tab.id !== "admin" || userInfo.role === "admin")
+                .map((tab) => (
                 <button
                   key={tab.id}
                   className={`profile__nav-btn ${activeTab === tab.id ? "profile__nav-btn--active" : ""}`}
@@ -525,11 +625,103 @@ export default function ProfilePage() {
               <div className="profile__section">
                 <div className="profile__section-header">
                   <h2>Sổ địa chỉ</h2>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => {
+                      setEditingAddress((prev) => !prev);
+                      setAddressMessage({ type: "", text: "" });
+                    }}
+                  >
+                    <FiEdit2 size={14} /> {editingAddress ? "Hủy" : hasAddress ? "Chỉnh sửa" : "Thêm địa chỉ"}
+                  </button>
                 </div>
 
-                <div className="profile__empty">
-                  <FiMapPin size={48} />
-                  <p>Chưa có dữ liệu địa chỉ.</p>
+                <div className="profile__info-card">
+                  {addressMessage.text && (
+                    <p style={{ color: addressMessage.type === "error" ? "var(--danger)" : "var(--success)", marginBottom: "12px" }}>
+                      {addressMessage.text}
+                    </p>
+                  )}
+
+                  {editingAddress ? (
+                    <div className="profile__edit-form">
+                      <div className="profile__edit-field">
+                        <label>Địa chỉ cụ thể</label>
+                        <input
+                          value={addressData.street}
+                          onChange={(e) => updateAddress("street", e.target.value)}
+                          placeholder="Số nhà, tên đường"
+                          autoComplete="street-address"
+                        />
+                      </div>
+
+                      <div className="profile__edit-row">
+                        <div className="profile__edit-field">
+                          <label>Phường/Xã</label>
+                          <input
+                            value={addressData.ward}
+                            onChange={(e) => updateAddress("ward", e.target.value)}
+                            autoComplete="address-level3"
+                          />
+                        </div>
+                        <div className="profile__edit-field">
+                          <label>Quận/Huyện</label>
+                          <input
+                            value={addressData.district}
+                            onChange={(e) => updateAddress("district", e.target.value)}
+                            autoComplete="address-level2"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="profile__edit-row">
+                        <div className="profile__edit-field">
+                          <label>Tỉnh/Thành phố</label>
+                          <input
+                            value={addressData.city}
+                            onChange={(e) => updateAddress("city", e.target.value)}
+                            autoComplete="address-level1"
+                          />
+                        </div>
+                        <div className="profile__edit-field">
+                          <label>Mã bưu chính</label>
+                          <input
+                            value={addressData.zipCode}
+                            onChange={(e) => updateAddress("zipCode", e.target.value)}
+                            autoComplete="postal-code"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="profile__edit-actions">
+                        <button
+                          className="btn btn-accent btn-sm"
+                          onClick={handleSaveAddress}
+                          disabled={isSavingAddress}
+                        >
+                          {isSavingAddress ? "Đang lưu..." : "Lưu địa chỉ"}
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => setEditingAddress(false)}
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    </div>
+                  ) : hasAddress ? (
+                    <div className="profile__info-grid" style={{ gridTemplateColumns: "1fr" }}>
+                      <div className="profile__info-item">
+                        <span className="profile__info-label">Địa chỉ mặc định</span>
+                        <span className="profile__info-value">{formattedAddress}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="profile__empty">
+                      <FiMapPin size={48} />
+                      <p>Bạn chưa thêm địa chỉ nào.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

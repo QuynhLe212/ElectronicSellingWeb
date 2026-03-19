@@ -2,6 +2,27 @@ import { apiClient } from "./apiClient";
 import { products as mockProducts } from "../data/data";
 
 const LOCAL_PRODUCTS_KEY = "local_products_data";
+const DEFAULT_PRODUCT_IMAGE = "https://picsum.photos/seed/product-placeholder/800/800";
+
+const UI_TO_API_CATEGORY = {
+    smartphones: "Phone",
+    laptops: "Laptop",
+    audio: "Other",
+    cameras: "Other",
+    tablets: "Tablet",
+    accessories: "Accessory",
+};
+
+const API_TO_UI_CATEGORY = {
+    Phone: "smartphones",
+    Laptop: "laptops",
+    Tablet: "tablets",
+    Accessory: "accessories",
+    Monitor: "accessories",
+    PC: "laptops",
+    Gaming: "laptops",
+    Other: "accessories",
+};
 
 const isNetworkError = (error) =>
     String(error ?.message || "").toLowerCase().includes("khong the ket noi den may chu");
@@ -21,6 +42,33 @@ const toQueryString = (params = {}) => {
 const toNumber = (value, fallback = 0) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toApiCategory = (category) => {
+    if (!category) return "";
+    return UI_TO_API_CATEGORY[category] || category;
+};
+
+const toUiCategory = (category) => {
+    if (!category) return "";
+    return API_TO_UI_CATEGORY[category] || category;
+};
+
+const toPlainObject = (value) => {
+    if (!value || typeof value !== "object") return {};
+    if (value instanceof Map) {
+        return Object.fromEntries(value);
+    }
+    return value;
+};
+
+const extractImageUrl = (image) => {
+    if (!image) return "";
+    if (typeof image === "string") return image;
+    if (typeof image === "object") {
+        return image.url || image.src || image.secure_url || "";
+    }
+    return "";
 };
 
 const readLocalProducts = () => {
@@ -132,14 +180,50 @@ const normalizeProduct = (product) => {
     if (!product) return null;
 
     const id = product.id || product._id;
-    const firstImage = product.image || product.thumbnail || product.images ?.[0] || "";
+    const normalizedImages = Array.isArray(product.images)
+        ? product.images.map(extractImageUrl).filter(Boolean)
+        : [];
+    const firstImage =
+        extractImageUrl(product.image) ||
+        extractImageUrl(product.thumbnail) ||
+        normalizedImages[0] ||
+        DEFAULT_PRODUCT_IMAGE;
+    const shortFeatures = Array.isArray(product.shortFeatures)
+        ? product.shortFeatures
+        : Array.isArray(product.features)
+            ? product.features
+            : [];
+    const specs = toPlainObject(product.specs || product.specifications);
+    const colors = Array.isArray(product.colors) ? product.colors : [];
+    const rating = toNumber(product.rating, 0);
+    const price = toNumber(product.price, 0);
+    const originalPrice = product.originalPrice == null ? null : toNumber(product.originalPrice, null);
+    const reviewCount =
+        toNumber(product.reviewCount, NaN) ||
+        toNumber(product.numReviews, NaN) ||
+        (Array.isArray(product.reviews) ? product.reviews.length : 0);
+    const discount =
+        toNumber(product.discount, NaN) ||
+        (Number.isFinite(originalPrice) && originalPrice > price
+            ? Math.round(((originalPrice - price) / originalPrice) * 100)
+            : 0);
+    const badge = product.badge || (product.isFeatured ? "new" : null);
 
     return {
         ...product,
         id,
+        category: toUiCategory(product.category),
+        rating,
+        price,
+        originalPrice,
+        badge,
+        discount,
         image: firstImage,
-        images: Array.isArray(product.images) && product.images.length > 0 ? product.images : [firstImage],
-        reviewCount: product.reviewCount || product.numReviews || 0,
+        images: normalizedImages.length > 0 ? normalizedImages : [firstImage],
+        reviewCount,
+        shortFeatures,
+        specs,
+        colors,
     };
 };
 
@@ -156,13 +240,26 @@ const localGetProducts = (params = {}) => {
 
 export const getProducts = async(params = {}) => {
     try {
-        const response = await apiClient.get(`/products${toQueryString(params)}`);
+        const requestParams = {
+            ...params,
+            category: toApiCategory(params.category),
+        };
+        const response = await apiClient.get(`/products${toQueryString(requestParams)}`);
 
         return {
             products: extractProductList(response),
-            page: response ?.page || response ?.data ?.page || 1,
-            pages: response ?.pages || response ?.data ?.pages || 1,
-            total: response ?.total || response ?.count || response ?.data ?.total || 0,
+            page: response ?.page || response ?.pagination ?.page || response ?.data ?.page || 1,
+            pages:
+                response ?.pages ||
+                response ?.pagination ?.totalPages ||
+                response ?.data ?.pages ||
+                1,
+            total:
+                response ?.total ||
+                response ?.count ||
+                response ?.pagination ?.totalProducts ||
+                response ?.data ?.total ||
+                0,
         };
     } catch (error) {
         if (!isNetworkError(error)) {

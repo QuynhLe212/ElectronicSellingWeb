@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiSearch, FiUser, FiShoppingCart, FiHeart, FiMenu, FiX, FiChevronDown, FiPhone, FiMail, FiTruck } from 'react-icons/fi';
 import { categories } from '../data/data';
+import { getFavorites } from '../services/favoritesService';
 import './Header.css';
 
 const megaMenuData = {
@@ -36,6 +37,7 @@ export default function Header() {
     const [activeMega, setActiveMega] = useState(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [favoritesCount, setFavoritesCount] = useState(0);
     const megaRef = useRef(null);
     const navigate = useNavigate();
 
@@ -43,6 +45,18 @@ export default function Header() {
         const handleScroll = () => setScrolled(window.scrollY > 40);
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    useEffect(() => {
+        const updateFavoritesCount = () => {
+            const favorites = getFavorites();
+            setFavoritesCount(favorites.length);
+        };
+        updateFavoritesCount();
+
+        // Listen for storage changes (when favorites are updated in other tabs/windows)
+        window.addEventListener('storage', updateFavoritesCount);
+        return () => window.removeEventListener('storage', updateFavoritesCount);
     }, []);
 
     useEffect(() => {
@@ -86,10 +100,10 @@ export default function Header() {
                     </form>
 
                     <div className="header__icons">
-                        <button className="header__icon-btn">
+                        <Link to="/favorites" className="header__icon-btn">
                             <FiHeart size={22} />
-                            <span className="header__icon-badge">3</span>
-                        </button>
+                            <span className="header__icon-badge">{favoritesCount}</span>
+                        </Link>
                         <Link to="/profile" className="header__icon-btn">
                             <FiUser size={22} />
                         </Link>
