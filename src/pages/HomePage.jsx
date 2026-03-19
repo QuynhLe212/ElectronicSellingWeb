@@ -1,12 +1,46 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiArrowRight, FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 import ProductCard from '../components/ProductCard';
 import { products, categories, partnerBrands } from '../data/data';
+import { getFeaturedProducts, getTopRatedProducts } from '../services/productsService';
 import './HomePage.css';
 
 export default function HomePage() {
-    const featuredProducts = products.slice(0, 8);
-    const newArrivals = products.filter(p => p.badge === 'new');
+    const [featuredProducts, setFeaturedProducts] = useState(products.slice(0, 8));
+    const [newArrivals, setNewArrivals] = useState(products.filter((p) => p.badge === 'new'));
+
+    useEffect(() => {
+        let ignore = false;
+
+        const loadHomeProducts = async () => {
+            try {
+                const [featured, topRated] = await Promise.all([
+                    getFeaturedProducts(),
+                    getTopRatedProducts(),
+                ]);
+
+                if (ignore) return;
+
+                if (featured.length > 0) {
+                    setFeaturedProducts(featured.slice(0, 8));
+                }
+
+                const topRatedNew = topRated.filter((p) => p.badge === 'new');
+                if (topRatedNew.length > 0) {
+                    setNewArrivals(topRatedNew.slice(0, 8));
+                }
+            } catch (error) {
+                // Giữ fallback mock data để trang vẫn hiển thị khi API chưa sẵn sàng.
+            }
+        };
+
+        loadHomeProducts();
+
+        return () => {
+            ignore = true;
+        };
+    }, []);
 
     return (
         <div className="home">

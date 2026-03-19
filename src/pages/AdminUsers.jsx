@@ -22,12 +22,57 @@ const initialUsers = [
   },
 ];
 
+const getUserFromStorage = (key) => {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const buildUsersForAdmin = () => {
+  const currentUser = getUserFromStorage("user_data");
+  const localAuthUser = getUserFromStorage("local_auth_user");
+
+  const extraUsers = [currentUser, localAuthUser]
+    .filter(Boolean)
+    .map((user, index) => ({
+      id: user.id || Date.now() + index,
+      name: user.name || user.fullName || "Người dùng",
+      email: user.email || "",
+      avatar: user.avatarUrl || user.avatar?.url || `https://i.pravatar.cc/100?u=${encodeURIComponent(user.email || String(user.id || index))}`,
+    }))
+    .filter((user) => user.email);
+
+  const merged = [...initialUsers];
+
+  extraUsers.forEach((extra) => {
+    const exists = merged.some(
+      (u) =>
+        (u.email && u.email.toLowerCase() === extra.email.toLowerCase()) ||
+        String(u.id) === String(extra.id),
+    );
+
+    if (!exists) {
+      merged.unshift(extra);
+    }
+  });
+
+  return merged;
+};
+
 export default function AdminUsers() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState(() => buildUsersForAdmin());
   const [search, setSearch] = useState("");
 
   const filteredUsers = users.filter((u) =>
-    u.name.toLowerCase().includes(search.toLowerCase()),
+    u.name.toLowerCase().includes(search.toLowerCase()) ||
+    u.email.toLowerCase().includes(search.toLowerCase()),
   );
 
   const deleteUser = (id) => {

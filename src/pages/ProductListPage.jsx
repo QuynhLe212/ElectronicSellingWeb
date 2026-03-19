@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { FiGrid, FiList, FiChevronDown, FiX, FiFilter } from 'react-icons/fi';
 import { FaStar } from 'react-icons/fa';
 import ProductCard from '../components/ProductCard';
-import { products, categories, brands } from '../data/data';
+import { categories, brands, products as mockProducts } from '../data/data';
+import { getProducts } from '../services/productsService';
 import './ProductListPage.css';
 
 const categoryNameMap = {
@@ -23,6 +24,58 @@ const priceRanges = [
     { label: 'Trên 50 triệu', min: 50000000, max: Infinity },
 ];
 
+const applyLocalFilters = ({
+    source,
+    searchQuery,
+    selectedCategories,
+    selectedBrands,
+    selectedPriceRange,
+    sortBy,
+}) => {
+    let result = [...source];
+
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        result = result.filter(
+            (p) =>
+                String(p.name || '').toLowerCase().includes(q) ||
+                String(p.description || '').toLowerCase().includes(q)
+        );
+    }
+
+    if (selectedCategories.length > 0) {
+        result = result.filter((p) => selectedCategories.includes(p.category));
+    }
+
+    if (selectedBrands.length > 0) {
+        result = result.filter((p) => selectedBrands.includes(p.brand));
+    }
+
+    if (selectedPriceRange !== null) {
+        const range = priceRanges[selectedPriceRange];
+        result = result.filter((p) => Number(p.price || 0) >= range.min && Number(p.price || 0) < range.max);
+    }
+
+    switch (sortBy) {
+        case 'price-low':
+            result.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+            break;
+        case 'price-high':
+            result.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+            break;
+        case 'rating':
+            result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+            break;
+        case 'newest':
+            result.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+            break;
+        default:
+            break;
+    }
+
+    return result;
+};
+
 export default function ProductListPage() {
     const [searchParams] = useSearchParams();
     const categoryParam = searchParams.get('category') || '';
@@ -35,6 +88,20 @@ export default function ProductListPage() {
     const [selectedPriceRange, setSelectedPriceRange] = useState(null);
     const [selectedRating, setSelectedRating] = useState(0);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [productList, setProductList] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+    const [apiError, setApiError] = useState('');
+
+    useEffect(() => {
+        setSelectedCategories(categoryParam ? [categoryParam] : []);
+        setCurrentPage(1);
+    }, [categoryParam]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery]);
 
     const toggleCategory = (slug) => {
         setSelectedCategories((prev) =>
@@ -53,47 +120,114 @@ export default function ProductListPage() {
         setSelectedBrands([]);
         setSelectedPriceRange(null);
         setSelectedRating(0);
+        setCurrentPage(1);
     };
 
+    useEffect(() => {
+        let ignore = false;
+
+        const loadProducts = async () => {
+            try {
+                setIsLoading(true);
+                setApiError('');
+
+                const selectedRange =
+                    selectedPriceRange !== null ? priceRanges[selectedPriceRange] : null;
+
+                const sortMap = {
+                    relevance: '-createdAt',
+                    'price-low': 'price',
+                    'price-high': '-price',
+                    rating: '-rating',
+                    newest: '-createdAt',
+                };
+
+                const response = await getProducts({
+                    category: selectedCategories[0] || '',
+                    search: searchQuery,
+                    minPrice: selectedRange ? selectedRange.min : '',
+                    maxPrice: selectedRange && Number.isFinite(selectedRange.max) ? selectedRange.max : '',
+                    brand: selectedBrands[0] || '',
+                    sort: sortMap[sortBy] || '-createdAt',
+                    page: currentPage,
+                    limit: 12,
+                });
+
+                if (ignore) return;
+
+                setProductList(response.products || []);
+                setTotalPages(response.pages || 1);
+            } catch (error) {
+                if (ignore) return;
+
+                const fallback = applyLocalFilters({
+                    source: mockProducts,
+                    searchQuery,
+                    selectedCategories,
+                    selectedBrands,
+                    selectedPriceRange,
+                    sortBy,
+                });
+
+                const pageSize = 12;
+                const pages = Math.max(1, Math.ceil(fallback.length / pageSize));
+                const safePage = Math.min(currentPage, pages);
+                const start = (safePage - 1) * pageSize;
+                const end = start + pageSize;
+
+                setApiError('');
+                setProductList(fallback.slice(start, end));
+                setTotalPages(pages);
+
+                if (safePage !== currentPage) {
+                    setCurrentPage(safePage);
+                }
+            } finally {
+                if (!ignore) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        loadProducts();
+
+        return () => {
+            ignore = true;
+        };
+    }, [searchQuery, selectedCategories, selectedBrands, selectedPriceRange, sortBy, currentPage]);
+
     const filteredProducts = useMemo(() => {
-        let result = [...products];
+        let result = [...productList];
 
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(
-                (p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
-            );
-        }
-
-        if (selectedCategories.length > 0) {
+        if (selectedCategories.length > 1) {
             result = result.filter((p) => selectedCategories.includes(p.category));
         }
 
-        if (selectedBrands.length > 0) {
+        if (selectedBrands.length > 1) {
             result = result.filter((p) => selectedBrands.includes(p.brand));
         }
 
-        if (selectedPriceRange !== null) {
-            const range = priceRanges[selectedPriceRange];
-            result = result.filter((p) => p.price >= range.min && p.price < range.max);
-        }
-
         if (selectedRating > 0) {
-            result = result.filter((p) => p.rating >= selectedRating);
-        }
-
-        switch (sortBy) {
-            case 'price-low': result.sort((a, b) => a.price - b.price); break;
-            case 'price-high': result.sort((a, b) => b.price - a.price); break;
-            case 'rating': result.sort((a, b) => b.rating - a.rating); break;
-            case 'newest': result.sort((a, b) => b.id - a.id); break;
-            default: break;
+            result = result.filter((p) => Number(p.rating || 0) >= selectedRating);
         }
 
         return result;
-    }, [searchQuery, selectedCategories, selectedBrands, selectedPriceRange, selectedRating, sortBy]);
+    }, [productList, selectedCategories, selectedBrands, selectedRating]);
 
     const activeFilterCount = selectedCategories.length + selectedBrands.length + (selectedPriceRange !== null ? 1 : 0) + (selectedRating > 0 ? 1 : 0);
+
+    const pageNumbers = useMemo(() => {
+        const pages = [];
+        const maxVisible = 5;
+        const start = Math.max(1, currentPage - 2);
+        const end = Math.min(totalPages, start + maxVisible - 1);
+
+        for (let p = start; p <= end; p += 1) {
+            pages.push(p);
+        }
+
+        return pages;
+    }, [currentPage, totalPages]);
 
     const renderFilters = () => (
         <div className="plp__filters-content">
@@ -268,29 +402,62 @@ export default function ProductListPage() {
                         </div>
 
                         {/* Sản phẩm */}
-                        {filteredProducts.length > 0 ? (
+                        {isLoading && (
+                            <div className="plp__empty">
+                                <h3>Đang tải sản phẩm...</h3>
+                            </div>
+                        )}
+
+                        {!isLoading && apiError && (
+                            <div className="plp__empty">
+                                <h3>Không thể tải sản phẩm</h3>
+                                <p>{apiError}</p>
+                            </div>
+                        )}
+
+                        {!isLoading && !apiError && filteredProducts.length > 0 ? (
                             <div className={`plp__products ${viewMode === 'list' ? 'plp__products--list' : ''}`}>
                                 {filteredProducts.map((product) => (
                                     <ProductCard key={product.id} product={product} listView={viewMode === 'list'} />
                                 ))}
                             </div>
-                        ) : (
+                        ) : !isLoading && !apiError ? (
                             <div className="plp__empty">
                                 <span className="plp__empty-icon">🔍</span>
                                 <h3>Không tìm thấy sản phẩm</h3>
                                 <p>Hãy thử điều chỉnh bộ lọc hoặc từ khóa tìm kiếm</p>
                                 <button className="btn btn-primary" onClick={clearAllFilters}>Xóa tất cả bộ lọc</button>
                             </div>
-                        )}
+                        ) : null}
 
                         {/* Phân trang */}
-                        {filteredProducts.length > 0 && (
+                        {!isLoading && !apiError && filteredProducts.length > 0 && (
                             <div className="plp__pagination">
-                                <button className="plp__page-btn plp__page-btn--disabled">&lt; Trước</button>
-                                <button className="plp__page-btn plp__page-btn--active">1</button>
-                                <button className="plp__page-btn">2</button>
-                                <button className="plp__page-btn">3</button>
-                                <button className="plp__page-btn">Sau &gt;</button>
+                                <button
+                                    className={`plp__page-btn ${currentPage <= 1 ? 'plp__page-btn--disabled' : ''}`}
+                                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                    disabled={currentPage <= 1}
+                                >
+                                    &lt; Trước
+                                </button>
+
+                                {pageNumbers.map((pageNum) => (
+                                    <button
+                                        key={pageNum}
+                                        className={`plp__page-btn ${currentPage === pageNum ? 'plp__page-btn--active' : ''}`}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                ))}
+
+                                <button
+                                    className={`plp__page-btn ${currentPage >= totalPages ? 'plp__page-btn--disabled' : ''}`}
+                                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage >= totalPages}
+                                >
+                                    Sau &gt;
+                                </button>
                             </div>
                         )}
                     </main>

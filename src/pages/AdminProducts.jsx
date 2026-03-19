@@ -1,12 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
-import { products, categories, brands } from "../data/data";
-import { FiTrash2, FiPlus } from "react-icons/fi";
+import { categories, brands } from "../data/data";
+import { FiTrash2, FiPlus, FiEdit2 } from "react-icons/fi";
+import {
+  createProduct,
+  deleteProduct,
+  getProducts,
+  updateProduct,
+} from "../services/productsService";
 
 export default function AdminProducts() {
-  const [productList, setProductList] = useState(products);
+  const [productList, setProductList] = useState([]);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -16,37 +25,47 @@ export default function AdminProducts() {
     image: "",
   });
 
+  useEffect(() => {
+    let ignore = false;
+
+    const loadProducts = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
+        const response = await getProducts({ page: 1, limit: 500, sort: "-createdAt" });
+        if (ignore) return;
+        setProductList(response.products || []);
+      } catch (error) {
+        if (ignore) return;
+        setErrorMessage(error.message || "Không thể tải sản phẩm.");
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const formatPrice = (price) => Number(price).toLocaleString("vi-VN") + "₫";
 
-  const deleteProduct = (id) => {
+  const onDeleteProduct = async (id) => {
     if (window.confirm("Bạn có chắc muốn xoá sản phẩm?")) {
-      setProductList(productList.filter((p) => p.id !== id));
+      try {
+        await deleteProduct(id);
+        setProductList((prev) => prev.filter((p) => p.id !== id));
+      } catch (error) {
+        alert(error.message || "Không thể xóa sản phẩm.");
+      }
     }
   };
 
-  const addProduct = () => {
-    if (!newProduct.name || !newProduct.price) {
-      alert("Nhập đủ thông tin");
-      return;
-    }
-
-    const product = {
-      id: Date.now(),
-      name: newProduct.name,
-      price: Number(newProduct.price),
-      brand: newProduct.brand,
-      category: newProduct.category,
-      image: newProduct.image,
-      images: [newProduct.image],
-      rating: 0,
-      reviewCount: 0,
-      originalPrice: null,
-    };
-
-    setProductList([...productList, product]);
-
-    setShowForm(false);
-
+  const resetForm = () => {
     setNewProduct({
       name: "",
       price: "",
@@ -54,6 +73,52 @@ export default function AdminProducts() {
       category: "",
       image: "",
     });
+    setEditingProductId(null);
+  };
+
+  const onSubmitProduct = async () => {
+    if (!newProduct.name || !newProduct.price) {
+      alert("Nhập đủ thông tin");
+      return;
+    }
+
+    const payload = {
+      name: newProduct.name,
+      price: Number(newProduct.price),
+      brand: newProduct.brand,
+      category: newProduct.category,
+      image: newProduct.image,
+      images: newProduct.image ? [newProduct.image] : [],
+    };
+
+    try {
+      if (editingProductId) {
+        const updated = await updateProduct(editingProductId, payload);
+        setProductList((prev) =>
+          prev.map((item) => (item.id === editingProductId ? { ...item, ...updated } : item)),
+        );
+      } else {
+        const created = await createProduct(payload);
+        setProductList((prev) => [created, ...prev]);
+      }
+
+      setShowForm(false);
+      resetForm();
+    } catch (error) {
+      alert(error.message || "Không thể lưu sản phẩm.");
+    }
+  };
+
+  const openEditForm = (product) => {
+    setEditingProductId(product.id);
+    setNewProduct({
+      name: product.name || "",
+      price: product.price || "",
+      brand: product.brand || "",
+      category: product.category || "",
+      image: product.image || product.images?.[0] || "",
+    });
+    setShowForm(true);
   };
 
   const filtered = productList.filter((p) =>
@@ -67,6 +132,9 @@ export default function AdminProducts() {
       <div className="admin__content">
         <h1 className="admin__title">Quản lý sản phẩm</h1>
 
+        {isLoading && <p>Đang tải sản phẩm...</p>}
+        {errorMessage && <p style={{ color: "var(--danger)" }}>{errorMessage}</p>}
+
         {/* TOOLBAR */}
         <div className="admin__toolbar">
           <input
@@ -76,7 +144,13 @@ export default function AdminProducts() {
             onChange={(e) => setSearch(e.target.value)}
           />
 
-          <button className="admin__add" onClick={() => setShowForm(true)}>
+          <button
+            className="admin__add"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+          >
             <FiPlus /> Thêm sản phẩm
           </button>
         </div>
@@ -121,12 +195,22 @@ export default function AdminProducts() {
                 <td>⭐ {p.rating}</td>
 
                 <td>
-                  <button
-                    className="admin__delete"
-                    onClick={() => deleteProduct(p.id)}
-                  >
-                    <FiTrash2 />
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      className="admin__delete"
+                      onClick={() => openEditForm(p)}
+                      title="Sửa sản phẩm"
+                    >
+                      <FiEdit2 />
+                    </button>
+                    <button
+                      className="admin__delete"
+                      onClick={() => onDeleteProduct(p.id)}
+                      title="Xóa sản phẩm"
+                    >
+                      <FiTrash2 />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -137,7 +221,7 @@ export default function AdminProducts() {
         {showForm && (
           <div className="admin__modal">
             <div className="admin__form">
-              <h2>Thêm sản phẩm</h2>
+              <h2>{editingProductId ? "Cập nhật sản phẩm" : "Thêm sản phẩm"}</h2>
 
               <input
                 placeholder="Tên sản phẩm"
@@ -226,9 +310,16 @@ export default function AdminProducts() {
               )}
 
               <div className="form-actions">
-                <button onClick={addProduct}>Lưu</button>
+                <button onClick={onSubmitProduct}>Lưu</button>
 
-                <button onClick={() => setShowForm(false)}>Hủy</button>
+                <button
+                  onClick={() => {
+                    setShowForm(false);
+                    resetForm();
+                  }}
+                >
+                  Hủy
+                </button>
               </div>
             </div>
           </div>

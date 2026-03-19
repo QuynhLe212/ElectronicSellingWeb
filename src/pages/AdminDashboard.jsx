@@ -1,7 +1,8 @@
 import AdminSidebar from "../components/AdminSidebar";
 import { FiBox, FiShoppingCart, FiUsers, FiDollarSign } from "react-icons/fi";
-
-import { products, mockOrders, mockUser } from "../data/data";
+import { useEffect, useMemo, useState } from "react";
+import { getProducts } from "../services/productsService";
+import { getOrdersAdmin } from "../services/ordersService";
 
 import {
   LineChart,
@@ -14,11 +15,50 @@ import {
 } from "recharts";
 
 export default function AdminDashboard() {
-  // ===== TÍNH DOANH THU =====
-
-  const totalRevenue = mockOrders.reduce((sum, order) => sum + order.total, 0);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const formatPrice = (price) => price.toLocaleString("vi-VN") + "₫";
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadDashboard = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
+
+        const [productResponse, orderResponse] = await Promise.all([
+          getProducts({ page: 1, limit: 500 }),
+          getOrdersAdmin(),
+        ]);
+
+        if (ignore) return;
+        setProducts(productResponse.products || []);
+        setOrders(orderResponse || []);
+      } catch (error) {
+        if (ignore) return;
+        setErrorMessage(error.message || "Không thể tải dữ liệu dashboard.");
+      } finally {
+        if (!ignore) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadDashboard();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const totalRevenue = useMemo(
+    () => orders.reduce((sum, order) => sum + Number(order.total || order.totalPrice || 0), 0),
+    [orders],
+  );
 
   // ===== STATS =====
 
@@ -30,12 +70,12 @@ export default function AdminDashboard() {
     },
     {
       title: "Đơn hàng",
-      value: mockOrders.length,
+      value: orders.length,
       icon: <FiShoppingCart />,
     },
     {
       title: "Khách hàng",
-      value: 1,
+      value: "-",
       icon: <FiUsers />,
     },
     {
@@ -47,10 +87,16 @@ export default function AdminDashboard() {
 
   // ===== DATA CHART =====
 
-  const revenueData = mockOrders.map((o) => ({
-    month: o.date.slice(3, 5),
-    revenue: o.total,
-  }));
+  const revenueData = useMemo(
+    () =>
+      orders.map((o) => ({
+        month: o.createdAt
+          ? new Date(o.createdAt).toLocaleDateString("vi-VN", { month: "2-digit" })
+          : (o.date?.slice(3, 5) || "--"),
+        revenue: Number(o.total || o.totalPrice || 0),
+      })),
+    [orders],
+  );
 
   return (
     <div className="admin">
@@ -58,6 +104,9 @@ export default function AdminDashboard() {
 
       <div className="admin__content">
         <h1 className="admin__title">Dashboard</h1>
+
+        {isLoading && <p>Đang tải dữ liệu dashboard...</p>}
+        {errorMessage && <p style={{ color: "var(--danger)" }}>{errorMessage}</p>}
 
         {/* ===== STATS ===== */}
 

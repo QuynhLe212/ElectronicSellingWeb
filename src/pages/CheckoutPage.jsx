@@ -1,18 +1,15 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FiLock, FiCheck, FiChevronLeft, FiShield, FiTruck, FiCreditCard, FiTrash2, FiMinus, FiPlus } from 'react-icons/fi';
-import { products } from '../data/data';
+import { createOrder } from '../services/ordersService';
 import './CheckoutPage.css';
 
 function formatVND(price) {
     return price.toLocaleString('vi-VN') + '₫';
 }
 
-// Giỏ hàng mẫu
-const initialCart = [
-    { product: products[0], quantity: 1 },
-    { product: products[3], quantity: 2 },
-];
+// Giỏ hàng khởi tạo rỗng; chỉ hiển thị khi người dùng thêm sản phẩm.
+const initialCart = [];
 
 const steps = [
     { id: 1, label: 'Vận chuyển', icon: <FiTruck /> },
@@ -21,8 +18,13 @@ const steps = [
 ];
 
 export default function CheckoutPage() {
+    const navigate = useNavigate();
+    const isLoggedIn = Boolean(localStorage.getItem('user_token'));
     const [currentStep, setCurrentStep] = useState(1);
     const [cart, setCart] = useState(initialCart);
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+    const [checkoutError, setCheckoutError] = useState('');
+    const [createdOrder, setCreatedOrder] = useState(null);
     const [formData, setFormData] = useState({
         email: '',
         firstName: '',
@@ -61,8 +63,68 @@ export default function CheckoutPage() {
     const tax = 0; // VAT đã bao gồm trong giá tại Việt Nam
     const total = subtotal + shipping + tax;
 
-    const nextStep = () => setCurrentStep((s) => Math.min(3, s + 1));
+    const nextStep = () => {
+        if (currentStep === 1 && cart.length === 0) {
+            setCheckoutError('Giỏ hàng đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.');
+            return;
+        }
+
+        setCheckoutError('');
+        setCurrentStep((s) => Math.min(3, s + 1));
+    };
     const prevStep = () => setCurrentStep((s) => Math.max(1, s - 1));
+
+    const handlePlaceOrder = async () => {
+        const token = localStorage.getItem('user_token');
+        if (!token) {
+            setCheckoutError('Vui lòng đăng nhập để đặt hàng.');
+            navigate('/login');
+            return;
+        }
+
+        if (cart.length === 0) {
+            setCheckoutError('Giỏ hàng đang trống.');
+            return;
+        }
+
+        try {
+            setIsPlacingOrder(true);
+            setCheckoutError('');
+
+            const payload = {
+                orderItems: cart.map((item) => ({
+                    product: item.product.id,
+                    productId: item.product.id,
+                    name: item.product.name,
+                    image: item.product.image,
+                    qty: item.quantity,
+                    quantity: item.quantity,
+                    price: item.product.price,
+                })),
+                shippingAddress: {
+                    address: formData.address,
+                    ward: formData.ward,
+                    district: formData.district,
+                    city: formData.city,
+                    phone: formData.phone,
+                    fullName: `${formData.lastName} ${formData.firstName}`.trim(),
+                },
+                paymentMethod: 'card',
+                shippingPrice: shipping,
+                taxPrice: tax,
+                totalPrice: total,
+                itemsPrice: subtotal,
+            };
+
+            const newOrder = await createOrder(payload);
+            setCreatedOrder(newOrder);
+            nextStep();
+        } catch (error) {
+            setCheckoutError(error.message || 'Không thể tạo đơn hàng.');
+        } finally {
+            setIsPlacingOrder(false);
+        }
+    };
 
     return (
         <div className="checkout">
@@ -92,10 +154,10 @@ export default function CheckoutPage() {
                     {/* Form */}
                     <div className="checkout__form-area">
                         {/* Thông báo khách vãng lai */}
-                        {currentStep < 3 && (
+                        {currentStep < 3 && !isLoggedIn && (
                             <div className="checkout__guest-notice">
                                 <span>Bạn đang mua hàng với tư cách khách.</span>
-                                <a href="#">Đã có tài khoản? Đăng nhập</a>
+                                <Link to="/login">Đã có tài khoản? Đăng nhập</Link>
                             </div>
                         )}
 
@@ -227,9 +289,14 @@ export default function CheckoutPage() {
                                     </label>
                                 </div>
 
-                                <button className="btn btn-accent btn-lg checkout__continue" onClick={nextStep}>
+                                <button
+                                    className="btn btn-accent btn-lg checkout__continue"
+                                    onClick={nextStep}
+                                    disabled={cart.length === 0}
+                                >
                                     Tiếp tục thanh toán
                                 </button>
+                                {checkoutError && <p style={{ color: 'var(--danger)', marginTop: '10px' }}>{checkoutError}</p>}
                             </div>
                         )}
 
@@ -307,9 +374,15 @@ export default function CheckoutPage() {
                                     </div>
                                 </div>
 
-                                <button className="btn btn-accent btn-lg checkout__continue" onClick={nextStep}>
-                                    <FiLock size={16} /> Đặt hàng — {formatVND(total)}
+                                <button
+                                    className="btn btn-accent btn-lg checkout__continue"
+                                    onClick={handlePlaceOrder}
+                                    disabled={isPlacingOrder}
+                                >
+                                    <FiLock size={16} /> {isPlacingOrder ? 'Đang xử lý...' : `Đặt hàng — ${formatVND(total)}`}
                                 </button>
+
+                                {checkoutError && <p style={{ color: 'var(--danger)', marginTop: '10px' }}>{checkoutError}</p>}
 
                                 <p className="checkout__terms">
                                     Bằng việc đặt hàng, bạn đồng ý với <a href="#">Điều khoản dịch vụ</a> và <a href="#">Chính sách bảo mật</a> của chúng tôi.
@@ -330,7 +403,7 @@ export default function CheckoutPage() {
                                 <div className="checkout__order-details">
                                     <div className="checkout__order-row">
                                         <span>Mã đơn hàng</span>
-                                        <strong>#ES-2026-8742</strong>
+                                        <strong>{createdOrder?.id || createdOrder?._id || '#ES-2026-8742'}</strong>
                                     </div>
                                     <div className="checkout__order-row">
                                         <span>Dự kiến giao hàng</span>
@@ -358,25 +431,31 @@ export default function CheckoutPage() {
                             <h3 className="checkout__summary-title">Tóm tắt đơn hàng</h3>
 
                             <div className="checkout__summary-items">
-                                {cart.map((item, idx) => (
-                                    <div key={idx} className="checkout__summary-item">
-                                        <img src={item.product.image} alt={item.product.name} className="checkout__summary-img" />
-                                        <div className="checkout__summary-item-info">
-                                            <p className="checkout__summary-item-name">{item.product.name}</p>
-                                            <div className="checkout__summary-item-qty">
-                                                <button onClick={() => updateQuantity(idx, -1)}><FiMinus size={12} /></button>
-                                                <span>{item.quantity}</span>
-                                                <button onClick={() => updateQuantity(idx, 1)}><FiPlus size={12} /></button>
+                                {cart.length === 0 ? (
+                                    <p style={{ color: 'var(--gray-600)', padding: '8px 0' }}>
+                                        Giỏ hàng đang trống.
+                                    </p>
+                                ) : (
+                                    cart.map((item, idx) => (
+                                        <div key={idx} className="checkout__summary-item">
+                                            <img src={item.product.image} alt={item.product.name} className="checkout__summary-img" />
+                                            <div className="checkout__summary-item-info">
+                                                <p className="checkout__summary-item-name">{item.product.name}</p>
+                                                <div className="checkout__summary-item-qty">
+                                                    <button onClick={() => updateQuantity(idx, -1)}><FiMinus size={12} /></button>
+                                                    <span>{item.quantity}</span>
+                                                    <button onClick={() => updateQuantity(idx, 1)}><FiPlus size={12} /></button>
+                                                </div>
+                                            </div>
+                                            <div className="checkout__summary-item-right">
+                                                <span className="checkout__summary-item-price">{formatVND(item.product.price * item.quantity)}</span>
+                                                <button className="checkout__summary-remove" onClick={() => removeItem(idx)}>
+                                                    <FiTrash2 size={14} />
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="checkout__summary-item-right">
-                                            <span className="checkout__summary-item-price">{formatVND(item.product.price * item.quantity)}</span>
-                                            <button className="checkout__summary-remove" onClick={() => removeItem(idx)}>
-                                                <FiTrash2 size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
 
                             {/* Mã giảm giá */}

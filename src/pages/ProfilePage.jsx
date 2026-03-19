@@ -12,7 +12,14 @@ import {
   FiCalendar,
   FiChevronRight,
 } from "react-icons/fi";
-import { clearSession, getMe, updateMyProfile } from "../services/authService";
+import {
+  changeMyPassword,
+  clearSession,
+  getMe,
+  logout,
+  updateMyProfile,
+} from "../services/authService";
+import { getMyOrders } from "../services/ordersService";
 import { mockUser } from "../data/data";
 import "./ProfilePage.css";
 
@@ -73,6 +80,16 @@ export default function ProfilePage() {
     promoNotif: true,
     orderNotif: true,
   });
+  const [orders, setOrders] = useState([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState("");
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordMessage, setPasswordMessage] = useState({ type: "", text: "" });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const userDisplayName = useMemo(() => {
     const combined = `${profileData.firstName} ${profileData.lastName}`.trim();
@@ -110,11 +127,22 @@ export default function ProfilePage() {
           email: user.email || "",
           phone: user.phone || "",
         });
+
+        try {
+          setIsOrdersLoading(true);
+          setOrdersError("");
+          const myOrders = await getMyOrders();
+          setOrders(Array.isArray(myOrders) ? myOrders : []);
+        } catch (orderError) {
+          setOrders([]);
+          setOrdersError(orderError.message || "Không thể tải danh sách đơn hàng.");
+        }
       } catch (error) {
         clearSession();
         navigate("/login");
       } finally {
         setIsProfileLoading(false);
+        setIsOrdersLoading(false);
       }
     };
 
@@ -155,12 +183,61 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    clearSession();
-
-    // Điều hướng về trang đăng nhập
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      // Cho phép đăng xuất local ngay cả khi API logout gặp lỗi.
+    } finally {
+      clearSession();
+      navigate("/login");
+    }
   };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      setPasswordMessage({ type: "error", text: "Vui lòng nhập đủ thông tin mật khẩu." });
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordMessage({ type: "error", text: "Mật khẩu mới phải có ít nhất 6 ký tự." });
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordMessage({ type: "error", text: "Xác nhận mật khẩu mới không khớp." });
+      return;
+    }
+
+    try {
+      setIsChangingPassword(true);
+      setPasswordMessage({ type: "", text: "" });
+      await changeMyPassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordMessage({ type: "success", text: "Đổi mật khẩu thành công." });
+    } catch (error) {
+      setPasswordMessage({ type: "error", text: error.message || "Không thể đổi mật khẩu." });
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const orderStats = useMemo(() => {
+    const totalOrders = orders.length;
+    const totalSpent = orders.reduce(
+      (sum, order) => sum + Number(order.total || order.totalPrice || 0),
+      0,
+    );
+
+    return {
+      totalOrders,
+      totalSpent,
+    };
+  }, [orders]);
 
   return (
     <div className="profile">
@@ -203,7 +280,7 @@ export default function ProfilePage() {
           {/* Stats */}
           <div className="profile__stats">
             <div className="profile__stat">
-              <span className="profile__stat-num">0</span>
+              <span className="profile__stat-num">{orderStats.totalOrders}</span>
               <span className="profile__stat-label">Đơn hàng</span>
             </div>
             <div className="profile__stat">
@@ -211,7 +288,7 @@ export default function ProfilePage() {
               <span className="profile__stat-label">Địa chỉ</span>
             </div>
             <div className="profile__stat">
-              <span className="profile__stat-num">{formatVND(0)}</span>
+              <span className="profile__stat-num">{formatVND(orderStats.totalSpent)}</span>
               <span className="profile__stat-label">Tổng chi tiêu</span>
             </div>
           </div>
@@ -370,10 +447,22 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                <div className="profile__empty" style={{ marginTop: "24px" }}>
-                  <FiPackage size={40} />
-                  <p>Chưa có đơn hàng</p>
-                </div>
+                {orderStats.totalOrders === 0 ? (
+                  <div className="profile__empty" style={{ marginTop: "24px" }}>
+                    <FiPackage size={40} />
+                    <p>Chưa có đơn hàng</p>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: "24px", display: "grid", gap: "10px" }}>
+                    {orders.slice(0, 3).map((order) => (
+                      <div key={order.id || order._id} className="profile__info-card">
+                        <strong>Đơn #{order.id || order._id}</strong>
+                        <p>Trạng thái: {order.statusLabel || order.status || "Đang xử lý"}</p>
+                        <p>Tổng tiền: {formatVND(Number(order.total || order.totalPrice || 0))}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -387,10 +476,47 @@ export default function ProfilePage() {
                   <h2>Đơn hàng của tôi</h2>
                 </div>
 
-                <div className="profile__empty">
-                  <FiPackage size={48} />
-                  <p>Chưa có dữ liệu đơn hàng.</p>
-                </div>
+                {isOrdersLoading && <p>Đang tải đơn hàng...</p>}
+                {!isOrdersLoading && ordersError && (
+                  <p style={{ color: "var(--danger)" }}>{ordersError}</p>
+                )}
+                {!isOrdersLoading && !ordersError && orders.length === 0 && (
+                  <div className="profile__empty">
+                    <FiPackage size={48} />
+                    <p>Chưa có dữ liệu đơn hàng.</p>
+                  </div>
+                )}
+                {!isOrdersLoading && !ordersError && orders.length > 0 && (
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {orders.map((order) => (
+                      <div key={order.id || order._id} className="profile__info-card">
+                        <div className="profile__section-header" style={{ marginBottom: "10px" }}>
+                          <h3 style={{ fontSize: "16px" }}>Đơn #{order.id || order._id}</h3>
+                        </div>
+                        <div className="profile__info-grid">
+                          <div className="profile__info-item">
+                            <span className="profile__info-label">Ngày đặt</span>
+                            <span className="profile__info-value">
+                              {order.createdAt
+                                ? new Date(order.createdAt).toLocaleDateString("vi-VN")
+                                : order.date || "-"}
+                            </span>
+                          </div>
+                          <div className="profile__info-item">
+                            <span className="profile__info-label">Trạng thái</span>
+                            <span className="profile__info-value">{order.statusLabel || order.status || "Đang xử lý"}</span>
+                          </div>
+                          <div className="profile__info-item">
+                            <span className="profile__info-label">Tổng tiền</span>
+                            <span className="profile__info-value">
+                              {formatVND(Number(order.total || order.totalPrice || 0))}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -422,11 +548,54 @@ export default function ProfilePage() {
                     <div className="profile__settings-item">
                       <div>
                         <strong>Mật khẩu</strong>
-                        <p>Cập nhật lần cuối: 15/01/2026</p>
+                        <p>Cập nhật mật khẩu để bảo vệ tài khoản tốt hơn</p>
                       </div>
-                      <button className="btn btn-outline btn-sm">
-                        Đổi mật khẩu
-                      </button>
+                    </div>
+                    <div className="profile__edit-form" style={{ width: "100%" }}>
+                      <div className="profile__edit-field">
+                        <label>Mật khẩu hiện tại</label>
+                        <input
+                          type="password"
+                          value={passwordForm.currentPassword}
+                          onChange={(e) =>
+                            setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="profile__edit-field">
+                        <label>Mật khẩu mới</label>
+                        <input
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(e) =>
+                            setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="profile__edit-field">
+                        <label>Xác nhận mật khẩu mới</label>
+                        <input
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) =>
+                            setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))
+                          }
+                        />
+                      </div>
+                      {passwordMessage.text && (
+                        <p style={{ color: passwordMessage.type === "error" ? "var(--danger)" : "var(--success)" }}>
+                          {passwordMessage.text}
+                        </p>
+                      )}
+                      <div className="profile__edit-actions">
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={handleChangePassword}
+                          disabled={isChangingPassword}
+                        >
+                          {isChangingPassword ? "Đang đổi mật khẩu..." : "Đổi mật khẩu"}
+                        </button>
+                      </div>
                     </div>
                     <div className="profile__settings-item">
                       <div>

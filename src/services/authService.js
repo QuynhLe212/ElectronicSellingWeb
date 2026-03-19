@@ -1,20 +1,28 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { apiClient } from "./apiClient";
 
-const parseResponse = async (response) => {
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = data?.message || "Có lỗi xảy ra, vui lòng thử lại.";
-    throw new Error(message);
+const LOCAL_AUTH_USER_KEY = "local_auth_user";
+const LOCAL_AUTH_PASSWORD_KEY = "local_auth_password";
+
+const isNetworkError = (error) =>
+  String(error?.message || "").toLowerCase().includes("khong the ket noi den may chu");
+
+const getLocalAuthUser = () => {
+  const raw = localStorage.getItem(LOCAL_AUTH_USER_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
-  return data;
 };
 
-const getToken = () => localStorage.getItem("user_token");
-
-const getAuthHeaders = () => ({
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${getToken()}`,
-});
+const saveLocalAuthUser = (user, password) => {
+  localStorage.setItem(LOCAL_AUTH_USER_KEY, JSON.stringify(user));
+  if (password) {
+    localStorage.setItem(LOCAL_AUTH_PASSWORD_KEY, password);
+  }
+};
 
 const saveSession = (payload) => {
   const { token, user } = payload;
@@ -34,62 +42,156 @@ export const clearSession = () => {
 };
 
 export const login = async ({ email, password }) => {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
+  try {
+    const data = await apiClient.post("/auth/login", { email, password });
+    saveSession(data);
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      throw error;
+    }
 
-  const data = await parseResponse(response);
-  saveSession(data);
-  return data;
+    const localUser = getLocalAuthUser();
+    const localPassword = localStorage.getItem(LOCAL_AUTH_PASSWORD_KEY);
+
+    if (!localUser || localUser.email !== email || localPassword !== password) {
+      throw new Error("Thong tin dang nhap khong dung.");
+    }
+
+    const data = {
+      token: "local-demo-token",
+      user: localUser,
+    };
+    saveSession(data);
+    return data;
+  }
 };
 
 export const register = async ({ name, email, phone, password }) => {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name, email, phone, password }),
-  });
+  try {
+    const data = await apiClient.post("/auth/register", {
+      name,
+      email,
+      phone,
+      password,
+    });
+    saveSession(data);
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      throw error;
+    }
 
-  const data = await parseResponse(response);
-  saveSession(data);
-  return data;
+    const user = {
+      id: Date.now(),
+      name,
+      email,
+      phone,
+      role: "user",
+      createdAt: new Date().toISOString(),
+    };
+
+    saveLocalAuthUser(user, password);
+
+    const data = {
+      token: "local-demo-token",
+      user,
+    };
+    saveSession(data);
+    return data;
+  }
 };
 
 export const getMe = async () => {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
+  try {
+    const data = await apiClient.get("/auth/me", { auth: true });
+    if (data?.user) {
+      localStorage.setItem("user_data", JSON.stringify(data.user));
+      localStorage.setItem("user_email", data.user.email || "");
+      localStorage.setItem("user_name", data.user.name || "");
+      localStorage.setItem("user_role", data.user.role || "user");
+    }
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      throw error;
+    }
 
-  const data = await parseResponse(response);
-  if (data?.user) {
-    localStorage.setItem("user_data", JSON.stringify(data.user));
-    localStorage.setItem("user_email", data.user.email || "");
-    localStorage.setItem("user_name", data.user.name || "");
-    localStorage.setItem("user_role", data.user.role || "user");
+    const localUser = getLocalAuthUser();
+    if (!localUser) {
+      throw new Error("Khong tim thay thong tin tai khoan local.");
+    }
+
+    return { user: localUser };
   }
-  return data;
 };
 
 export const updateMyProfile = async ({ name, phone, address }) => {
-  const response = await fetch(`${API_BASE_URL}/auth/profile`, {
-    method: "PUT",
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ name, phone, address }),
-  });
+  try {
+    const data = await apiClient.put(
+      "/auth/profile",
+      { name, phone, address },
+      { auth: true },
+    );
 
-  const data = await parseResponse(response);
-  if (data?.user) {
-    localStorage.setItem("user_data", JSON.stringify(data.user));
-    localStorage.setItem("user_email", data.user.email || "");
-    localStorage.setItem("user_name", data.user.name || "");
-    localStorage.setItem("user_role", data.user.role || "user");
+    if (data?.user) {
+      localStorage.setItem("user_data", JSON.stringify(data.user));
+      localStorage.setItem("user_email", data.user.email || "");
+      localStorage.setItem("user_name", data.user.name || "");
+      localStorage.setItem("user_role", data.user.role || "user");
+    }
+
+    return data;
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      throw error;
+    }
+
+    const currentUser = getLocalAuthUser();
+    if (!currentUser) {
+      throw new Error("Khong tim thay thong tin tai khoan local.");
+    }
+
+    const updatedUser = {
+      ...currentUser,
+      name: name || currentUser.name,
+      phone: phone || currentUser.phone,
+      address: address || currentUser.address,
+    };
+
+    saveLocalAuthUser(updatedUser);
+
+    localStorage.setItem("user_data", JSON.stringify(updatedUser));
+    localStorage.setItem("user_email", updatedUser.email || "");
+    localStorage.setItem("user_name", updatedUser.name || "");
+    localStorage.setItem("user_role", updatedUser.role || "user");
+
+    return { user: updatedUser };
   }
-  return data;
+};
+
+export const changeMyPassword = async ({ currentPassword, newPassword }) => {
+  try {
+    return await apiClient.put(
+      "/auth/change-password",
+      { currentPassword, newPassword },
+      { auth: true },
+    );
+  } catch (error) {
+    if (!isNetworkError(error)) {
+      throw error;
+    }
+
+    const localPassword = localStorage.getItem(LOCAL_AUTH_PASSWORD_KEY);
+    if (localPassword && localPassword !== currentPassword) {
+      throw new Error("Mat khau hien tai khong dung.");
+    }
+
+    localStorage.setItem(LOCAL_AUTH_PASSWORD_KEY, newPassword);
+    return { message: "Doi mat khau thanh cong." };
+  }
+};
+
+export const logout = async () => {
+  return apiClient.post("/auth/logout", {}, { auth: true });
 };
