@@ -34,10 +34,13 @@ export default function AdminProducts() {
 
   const [newProduct, setNewProduct] = useState({
     name: "",
+    description: "",
     price: "",
+    stock: "10",
     brand: "",
     category: "",
-    image: "",
+    imageFiles: [],
+    imagePreview: "",
   });
 
   useEffect(() => {
@@ -83,37 +86,48 @@ export default function AdminProducts() {
   const resetForm = () => {
     setNewProduct({
       name: "",
+      description: "",
       price: "",
+      stock: "10",
       brand: "",
       category: "",
-      image: "",
+      imageFiles: [],
+      imagePreview: "",
     });
     setEditingProductId(null);
   };
 
   const onSubmitProduct = async () => {
-    if (!newProduct.name || !newProduct.price) {
+    if (!newProduct.name || !newProduct.price || !newProduct.category) {
       alert("Nhập đủ thông tin");
       return;
     }
 
-    const payload = {
-      name: newProduct.name,
-      price: Number(newProduct.price),
-      brand: newProduct.brand,
-      category: newProduct.category,
-      image: newProduct.image,
-      images: newProduct.image ? [newProduct.image] : [],
-    };
+    if (!editingProductId && newProduct.imageFiles.length === 0) {
+      alert("Vui lòng chọn ít nhất 1 ảnh sản phẩm");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("name", newProduct.name);
+    formData.append("description", newProduct.description || "Sản phẩm mới");
+    formData.append("price", String(Number(newProduct.price)));
+    formData.append("stock", String(Number(newProduct.stock || 0)));
+    formData.append("brand", newProduct.brand || "");
+    formData.append("category", newProduct.category);
+
+    newProduct.imageFiles.forEach((file) => {
+      formData.append("images", file);
+    });
 
     try {
       if (editingProductId) {
-        const updated = await updateProduct(editingProductId, payload);
+        const updated = await updateProduct(editingProductId, formData);
         setProductList((prev) =>
           prev.map((item) => (item.id === editingProductId ? { ...item, ...updated } : item)),
         );
       } else {
-        const created = await createProduct(payload);
+        const created = await createProduct(formData);
         setProductList((prev) => [created, ...prev]);
       }
 
@@ -129,10 +143,13 @@ export default function AdminProducts() {
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name || "",
+      description: product.description || "",
       price: product.price || "",
+      stock: product.stock || "0",
       brand: product.brand || "",
       category: product.category || "",
-      image: firstImage,
+      imageFiles: [],
+      imagePreview: firstImage,
     });
     setShowForm(true);
   };
@@ -253,6 +270,18 @@ export default function AdminProducts() {
               />
 
               <input
+                placeholder="Mô tả sản phẩm"
+                value={newProduct.description}
+                required
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    description: e.target.value,
+                  })
+                }
+              />
+
+              <input
                 type="number"
                 placeholder="Giá"
                 value={newProduct.price}
@@ -261,6 +290,19 @@ export default function AdminProducts() {
                   setNewProduct({
                     ...newProduct,
                     price: e.target.value,
+                  })
+                }
+              />
+
+              <input
+                type="number"
+                placeholder="Tồn kho"
+                value={newProduct.stock}
+                required
+                onChange={(e) =>
+                  setNewProduct({
+                    ...newProduct,
+                    stock: e.target.value,
                   })
                 }
               />
@@ -304,19 +346,24 @@ export default function AdminProducts() {
               </select>
 
               <input
-                placeholder="Link ảnh"
-                value={newProduct.image}
-                onChange={(e) =>
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  const preview = files.length > 0 ? URL.createObjectURL(files[0]) : newProduct.imagePreview;
+
                   setNewProduct({
                     ...newProduct,
-                    image: e.target.value,
-                  })
-                }
+                    imageFiles: files,
+                    imagePreview: preview,
+                  });
+                }}
               />
 
-              {newProduct.image && (
+              {newProduct.imagePreview && (
                 <img
-                  src={newProduct.image}
+                  src={newProduct.imagePreview}
                   alt="preview"
                   style={{
                     width: "120px",

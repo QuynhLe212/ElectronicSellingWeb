@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { FiGrid, FiList, FiChevronDown, FiX, FiFilter } from 'react-icons/fi';
 import { FaStar } from 'react-icons/fa';
 import ProductCard from '../components/ProductCard';
-import { categories, brands, products as mockProducts } from '../data/data';
+import { categories, brands } from '../data/data';
 import { getProducts } from '../services/productsService';
 import './ProductListPage.css';
 
@@ -23,58 +23,6 @@ const priceRanges = [
     { label: '20 - 50 triệu', min: 20000000, max: 50000000 },
     { label: 'Trên 50 triệu', min: 50000000, max: Infinity },
 ];
-
-const applyLocalFilters = ({
-    source,
-    searchQuery,
-    selectedCategories,
-    selectedBrands,
-    selectedPriceRange,
-    sortBy,
-}) => {
-    let result = [...source];
-
-    if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        result = result.filter(
-            (p) =>
-                String(p.name || '').toLowerCase().includes(q) ||
-                String(p.description || '').toLowerCase().includes(q)
-        );
-    }
-
-    if (selectedCategories.length > 0) {
-        result = result.filter((p) => selectedCategories.includes(p.category));
-    }
-
-    if (selectedBrands.length > 0) {
-        result = result.filter((p) => selectedBrands.includes(p.brand));
-    }
-
-    if (selectedPriceRange !== null) {
-        const range = priceRanges[selectedPriceRange];
-        result = result.filter((p) => Number(p.price || 0) >= range.min && Number(p.price || 0) < range.max);
-    }
-
-    switch (sortBy) {
-        case 'price-low':
-            result.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
-            break;
-        case 'price-high':
-            result.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-            break;
-        case 'rating':
-            result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
-            break;
-        case 'newest':
-            result.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
-            break;
-        default:
-            break;
-    }
-
-    return result;
-};
 
 export default function ProductListPage() {
     const [searchParams] = useSearchParams();
@@ -159,29 +107,9 @@ export default function ProductListPage() {
                 setTotalPages(response.pages || 1);
             } catch (error) {
                 if (ignore) return;
-
-                const fallback = applyLocalFilters({
-                    source: mockProducts,
-                    searchQuery,
-                    selectedCategories,
-                    selectedBrands,
-                    selectedPriceRange,
-                    sortBy,
-                });
-
-                const pageSize = 12;
-                const pages = Math.max(1, Math.ceil(fallback.length / pageSize));
-                const safePage = Math.min(currentPage, pages);
-                const start = (safePage - 1) * pageSize;
-                const end = start + pageSize;
-
-                setApiError('');
-                setProductList(fallback.slice(start, end));
-                setTotalPages(pages);
-
-                if (safePage !== currentPage) {
-                    setCurrentPage(safePage);
-                }
+                setApiError(error.message || 'Không thể tải danh sách sản phẩm từ máy chủ.');
+                setProductList([]);
+                setTotalPages(1);
             } finally {
                 if (!ignore) {
                     setIsLoading(false);

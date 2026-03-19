@@ -3,11 +3,26 @@ import { useParams, Link } from 'react-router-dom';
 import { FiShoppingCart, FiHeart, FiShare2, FiTruck, FiRefreshCw, FiShield, FiCheck, FiMinus, FiPlus, FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import StarRating from '../components/StarRating';
 import ProductCard from '../components/ProductCard';
-import { products, reviews } from '../data/data';
 import { addProductReview, getProductById, getTopRatedProducts } from '../services/productsService';
 import './ProductDetailPage.css';
 
 const PRODUCT_FALLBACK_IMAGE = 'https://picsum.photos/seed/product-fallback/1200/1200';
+const EMPTY_PRODUCT = {
+    id: '',
+    name: '',
+    category: '',
+    brand: '',
+    price: 0,
+    originalPrice: null,
+    rating: 0,
+    reviewCount: 0,
+    description: '',
+    shortFeatures: [],
+    specs: {},
+    colors: [],
+    image: PRODUCT_FALLBACK_IMAGE,
+    images: [PRODUCT_FALLBACK_IMAGE],
+};
 
 const categoryNameMap = {
     smartphones: 'Điện thoại',
@@ -30,9 +45,8 @@ function withFallbackImage(event) {
 
 export default function ProductDetailPage() {
     const { id } = useParams();
-    const fallbackProduct = products.find((p) => p.id === parseInt(id, 10)) || products[0];
-    const [product, setProduct] = useState(fallbackProduct);
-    const [relatedPool, setRelatedPool] = useState(products);
+    const [product, setProduct] = useState(EMPTY_PRODUCT);
+    const [relatedPool, setRelatedPool] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
     const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
@@ -53,7 +67,7 @@ export default function ProductDetailPage() {
             }));
         }
 
-        return reviews.filter((r) => r.productId === product.id);
+        return [];
     }, [product]);
 
     useEffect(() => {
@@ -79,7 +93,7 @@ export default function ProductDetailPage() {
             } catch (error) {
                 if (ignore) return;
                 setErrorMessage(error.message || 'Không thể tải chi tiết sản phẩm.');
-                setProduct(fallbackProduct);
+                setProduct(EMPTY_PRODUCT);
             } finally {
                 if (!ignore) {
                     setIsLoading(false);
@@ -213,6 +227,16 @@ export default function ProductDetailPage() {
                     </div>
                 )}
 
+                {!isLoading && !product?.id && (
+                    <div className="pdp__main" style={{ marginBottom: '24px' }}>
+                        <p>Không tìm thấy thông tin sản phẩm.</p>
+                        <Link to="/products" className="btn btn-outline btn-sm" style={{ marginTop: '12px', display: 'inline-flex' }}>
+                            Quay lại danh sách sản phẩm
+                        </Link>
+                    </div>
+                )}
+
+                {product?.id && (
                 <div className="pdp__main">
                     {/* Bộ sưu tập ảnh */}
                     <div className="pdp__gallery">
@@ -349,6 +373,7 @@ export default function ProductDetailPage() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Tabs */}
                 <div className="pdp__tabs">

@@ -8,13 +8,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--gray-500);
-    margin-bottom: 24px;
+    margin-bottom: 32px;
 }
 
 .plp__breadcrumb a {
     color: var(--gray-500);
+    transition: var(--transition-fast);
 }
 
 .plp__breadcrumb a:hover {
@@ -22,15 +23,15 @@
 }
 
 .plp__breadcrumb-current {
-    color: var(--gray-800);
-    font-weight: 500;
+    color: var(--primary);
+    font-weight: 600;
     text-transform: capitalize;
 }
 
 /* Layout */
 .plp__layout {
     display: flex;
-    gap: 32px;
+    gap: 40px;
 }
 
 /* Sidebar */
@@ -43,7 +44,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--gray-200);
 }
 
 .plp__sidebar-title {
@@ -53,6 +56,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    letter-spacing: -0.5px;
 }
 
 .plp__sidebar-close {
@@ -62,39 +66,47 @@
 
 /* Active Filters */
 .plp__active-filters {
-    background: var(--primary-50);
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    margin-bottom: 20px;
+    background: linear-gradient(135deg, var(--primary-50) 0%, var(--primary-light) 100%);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+    border: 1px solid var(--primary-light);
 }
 
 .plp__active-filters-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--gray-700);
-    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .plp__clear-all {
     color: var(--danger);
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
+    transition: var(--transition-fast);
+}
+
+.plp__clear-all:hover {
+    opacity: 0.8;
 }
 
 .plp__filter-pills {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
 }
 
 .plp__filter-pill {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
+    padding: 6px 12px;
     background: var(--white);
     border: 1px solid var(--gray-300);
     border-radius: 20px;

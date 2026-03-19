@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FiArrowRight, FiTruck, FiShield, FiRefreshCw, FiHeadphones } from 'react-icons/fi';
 import ProductCard from '../components/ProductCard';
-import { products as mockProducts, categories, partnerBrands } from '../data/data';
+import { categories, partnerBrands } from '../data/data';
 import { getFeaturedProducts, getProducts } from '../services/productsService';
 import './HomePage.css';
 
 export default function HomePage() {
-    const [featuredProducts, setFeaturedProducts] = useState(mockProducts.slice(0, 8));
-    const [newArrivals, setNewArrivals] = useState(mockProducts.filter((p) => p.badge === 'new').slice(0, 8));
+    const [featuredProducts, setFeaturedProducts] = useState([]);
+    const [newArrivals, setNewArrivals] = useState([]);
 
     useEffect(() => {
         let ignore = false;

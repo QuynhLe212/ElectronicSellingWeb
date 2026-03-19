@@ -20,8 +20,10 @@ import {
   updateMyProfile,
 } from "../services/authService";
 import { getMyOrders } from "../services/ordersService";
-import { mockUser } from "../data/data";
 import "./ProfilePage.css";
+
+const DEFAULT_AVATAR_URL = "https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff";
+const DEFAULT_MEMBER_SINCE = "--/----";
 
 function formatVND(price) {
   return price.toLocaleString("vi-VN") + "₫";
@@ -47,9 +49,9 @@ function splitName(fullName = "") {
 }
 
 function formatMemberSince(dateString) {
-  if (!dateString) return mockUser.memberSince;
+  if (!dateString) return DEFAULT_MEMBER_SINCE;
   const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return mockUser.memberSince;
+  if (Number.isNaN(date.getTime())) return DEFAULT_MEMBER_SINCE;
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
@@ -69,7 +71,7 @@ export default function ProfilePage() {
     phone: "",
     role: "user",
     createdAt: "",
-    avatarUrl: mockUser.avatar,
+    avatarUrl: DEFAULT_AVATAR_URL,
     address: {
       street: "",
       city: "",
@@ -153,7 +155,7 @@ export default function ProfilePage() {
           phone: user.phone || "",
           role: user.role || "user",
           createdAt: user.createdAt || "",
-          avatarUrl: user?.avatar?.url || mockUser.avatar,
+          avatarUrl: user?.avatar?.url || DEFAULT_AVATAR_URL,
           address: {
             street: user?.address?.street || "",
             city: user?.address?.city || "",

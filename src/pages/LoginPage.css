@@ -1,7 +1,7 @@
 /* ===== LOGIN PAGE ===== */
 .login-page {
-    padding: 40px 0;
-    background: linear-gradient(135deg, var(--primary-50) 0%, rgba(255, 255, 255, 0.5) 100%);
+    padding: 60px 0;
+    background: linear-gradient(135deg, var(--primary-50) 0%, #f0f9ff 50%, rgba(255, 255, 255, 0.8) 100%);
     min-height: calc(100vh - 200px);
     display: flex;
     align-items: center;
@@ -11,7 +11,7 @@
 .login-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 40px;
+    gap: 60px;
     max-width: 1200px;
     width: 100%;
     padding: 0 20px;
@@ -21,13 +21,14 @@
 /* Content */
 .login__content {
     background: var(--white);
-    border-radius: var(--radius-lg);
-    padding: 48px;
-    box-shadow: var(--shadow-lg);
+    border-radius: 16px;
+    padding: 56px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .login__header {
-    margin-bottom: 32px;
+    margin-bottom: 40px;
     text-align: center;
 }
 
@@ -35,33 +36,35 @@
     font-size: 32px;
     font-weight: 800;
     color: var(--gray-900);
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
 }
 
 .login__subtitle {
     font-size: 16px;
     color: var(--gray-500);
+    font-weight: 500;
 }
 
 /* Form */
 .login__form {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 24px;
 }
 
 .login__field {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
 .login__label {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     color: var(--gray-700);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
 }
 
 .login__input-wrapper {
@@ -72,25 +75,27 @@
 
 .login__input-icon {
     position: absolute;
-    left: 14px;
+    left: 16px;
     color: var(--gray-400);
     pointer-events: none;
+    font-size: 18px;
 }
 
 .login__input {
     width: 100%;
-    padding: 12px 14px 12px 44px;
+    padding: 14px 16px 14px 48px;
     border: 2px solid var(--gray-200);
-    border-radius: var(--radius-md);
+    border-radius: 10px;
     font-size: 14px;
-    transition: var(--transition);
-    background: var(--white);
+    transition: var(--transition-fast);
+    background: var(--gray-50);
 }
 
 .login__input:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 4px rgba(0, 86, 179, 0.1);
+    background: var(--white);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .login__input--error {

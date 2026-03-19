@@ -1,8 +1,9 @@
-import { apiClient } from "./apiClient";
+import { apiClient, API_BASE_URL } from "./apiClient";
 import { products as mockProducts } from "../data/data";
 
 const LOCAL_PRODUCTS_KEY = "local_products_data";
 const DEFAULT_PRODUCT_IMAGE = "https://picsum.photos/seed/product-placeholder/800/800";
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 
 const UI_TO_API_CATEGORY = {
     smartphones: "Phone",
@@ -64,11 +65,57 @@ const toPlainObject = (value) => {
 
 const extractImageUrl = (image) => {
     if (!image) return "";
-    if (typeof image === "string") return image;
+    if (typeof image === "string") {
+        if (image.startsWith("/uploads/")) {
+            return `${API_ORIGIN}${image}`;
+        }
+        return image;
+    }
     if (typeof image === "object") {
-        return image.url || image.src || image.secure_url || "";
+        const url = image.url || image.src || image.secure_url || "";
+        if (typeof url === "string" && url.startsWith("/uploads/")) {
+            return `${API_ORIGIN}${url}`;
+        }
+        return url;
     }
     return "";
+};
+
+const mapPayloadCategory = (payload) => {
+    if (payload instanceof FormData) {
+        const raw = payload.get("category");
+        const mapped = toApiCategory(raw);
+        if (mapped) {
+            payload.set("category", mapped);
+        }
+        return payload;
+    }
+
+    if (payload && typeof payload === "object") {
+        return {
+            ...payload,
+            category: toApiCategory(payload.category),
+        };
+    }
+
+    return payload;
+};
+
+const payloadToObject = (payload) => {
+    if (payload instanceof FormData) {
+        const result = {};
+        for (const [key, value] of payload.entries()) {
+            if (key === "images") continue;
+            result[key] = value;
+        }
+        return result;
+    }
+
+    if (payload && typeof payload === "object") {
+        return payload;
+    }
+
+    return {};
 };
 
 const readLocalProducts = () => {
@@ -262,11 +309,7 @@ export const getProducts = async(params = {}) => {
                 0,
         };
     } catch (error) {
-        if (!isNetworkError(error)) {
             throw error;
-        }
-
-        return localGetProducts(params);
     }
 };
 
@@ -275,15 +318,7 @@ export const getFeaturedProducts = async() => {
         const response = await apiClient.get("/products/featured");
         return extractProductList(response);
     } catch (error) {
-        if (!isNetworkError(error)) {
-            throw error;
-        }
-
-        return readLocalProducts()
-            .map(normalizeProduct)
-            .filter(Boolean)
-            .sort((a, b) => toNumber(b.reviewCount) - toNumber(a.reviewCount))
-            .slice(0, 8);
+        throw error;
     }
 };
 
@@ -292,15 +327,7 @@ export const getTopRatedProducts = async() => {
         const response = await apiClient.get("/products/top-rated");
         return extractProductList(response);
     } catch (error) {
-        if (!isNetworkError(error)) {
-            throw error;
-        }
-
-        return readLocalProducts()
-            .map(normalizeProduct)
-            .filter(Boolean)
-            .sort((a, b) => toNumber(b.rating) - toNumber(a.rating))
-            .slice(0, 12);
+        throw error;
     }
 };
 
@@ -310,18 +337,16 @@ export const getProductById = async(id) => {
         const product = response ?.product || response ?.data ?.product || response ?.data || response;
         return normalizeProduct(product);
     } catch (error) {
-        if (!isNetworkError(error)) {
-            throw error;
-        }
-
-        const match = readLocalProducts().find((p) => String(p.id) === String(id));
-        return normalizeProduct(match);
+        throw error;
     }
 };
 
 export const createProduct = async(payload) => {
+    const requestPayload = mapPayloadCategory(payload);
+    const payloadObject = payloadToObject(requestPayload);
+
     try {
-        const response = await apiClient.post("/products", payload, { auth: true });
+        const response = await apiClient.post("/products", requestPayload, { auth: true });
         const product = response ?.product || response ?.data ?.product || response ?.data || response;
         return normalizeProduct(product);
     } catch (error) {
@@ -337,11 +362,11 @@ export const createProduct = async(payload) => {
             originalPrice: null,
             badge: null,
             discount: 0,
-            description: payload.description || "",
-            shortFeatures: payload.shortFeatures || [],
-            specs: payload.specs || {},
-            colors: payload.colors || [],
-            ...payload,
+            description: payloadObject.description || "",
+            shortFeatures: payloadObject.shortFeatures || [],
+            specs: payloadObject.specs || {},
+            colors: payloadObject.colors || [],
+            ...payloadObject,
         });
 
         items.unshift(nextProduct);
@@ -351,8 +376,11 @@ export const createProduct = async(payload) => {
 };
 
 export const updateProduct = async(id, payload) => {
+    const requestPayload = mapPayloadCategory(payload);
+    const payloadObject = payloadToObject(requestPayload);
+
     try {
-        const response = await apiClient.put(`/products/${id}`, payload, { auth: true });
+        const response = await apiClient.put(`/products/${id}`, requestPayload, { auth: true });
         const product = response ?.product || response ?.data ?.product || response ?.data || response;
         return normalizeProduct(product);
     } catch (error) {
@@ -368,7 +396,7 @@ export const updateProduct = async(id, payload) => {
                 return item;
             }
 
-            updatedItem = normalizeProduct({...item, ...payload, id: item.id });
+            updatedItem = normalizeProduct({...item, ...payloadObject, id: item.id });
             return updatedItem;
         });
 
