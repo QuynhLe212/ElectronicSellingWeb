@@ -1,11 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import {
-  FiHome,
-  FiBox,
-  FiShoppingCart,
-  FiUsers,
-  FiSettings,
-} from "react-icons/fi";
+import { FiHome, FiBox, FiShoppingCart, FiUsers, FiSettings } from "react-icons/fi";
 
 export default function AdminSidebar() {
   const location = useLocation();
@@ -26,9 +20,7 @@ export default function AdminSidebar() {
           <Link
             key={index}
             to={item.path}
-            className={`admin__menu-item ${
-              location.pathname === item.path ? "active" : ""
-            }`}
+            className={`admin__menu-item ${location.pathname === item.path ? "active" : ""}`}
           >
             {item.icon}
             <span>{item.name}</span>
