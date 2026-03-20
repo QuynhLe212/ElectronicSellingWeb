@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiUser,
@@ -11,6 +11,8 @@ import {
   FiMail,
   FiCalendar,
   FiChevronRight,
+  FiCamera,
+  FiX,
 } from "react-icons/fi";
 import {
   changeMyPassword,
@@ -18,6 +20,7 @@ import {
   getMe,
   logout,
   updateMyProfile,
+  uploadAvatar,
 } from "../services/authService";
 import { getMyOrders } from "../services/ordersService";
 import "./ProfilePage.css";
@@ -57,12 +60,17 @@ function formatMemberSince(dateString) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const avatarInputRef = useRef(null);
+  
   const [activeTab, setActiveTab] = useState("overview");
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarMessage, setAvatarMessage] = useState({ type: "", text: "" });
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [profileMessage, setProfileMessage] = useState({ type: "", text: "" });
   const [addressMessage, setAddressMessage] = useState({ type: "", text: "" });
   const [userInfo, setUserInfo] = useState({
@@ -326,6 +334,50 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarMessage({ type: "error", text: "Vui lòng chọn file hình ảnh." });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarMessage({ type: "error", text: "Kích thước file không được vượt quá 5MB." });
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      setAvatarMessage({ type: "", text: "" });
+
+      const response = await uploadAvatar(file);
+      const avatarUrl = response && response.user && response.user.avatar && response.user.avatar.url;
+
+      if (avatarUrl) {
+        setUserInfo((prev) => ({
+          ...prev,
+          avatarUrl: avatarUrl,
+        }));
+        setAvatarMessage({ type: "success", text: "Cập nhật avatar thành công." });
+        // Close modal after successful upload with a small delay to show success message
+        setTimeout(() => {
+          setShowAvatarModal(false);
+        }, 1500);
+      } else {
+        throw new Error("Không nhận được URL avatar từ server.");
+      }
+    } catch (error) {
+      setAvatarMessage({ type: "error", text: error.message || "Không thể tải avatar lên." });
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+    }
+  };
+
   const orderStats = useMemo(() => {
     const totalOrders = orders.length;
     const totalSpent = orders.reduce(
@@ -352,9 +404,22 @@ export default function ProfilePage() {
                 alt="Avatar"
                 className="profile__avatar"
               />
-              <button className="profile__avatar-edit">
+              <button
+                className="profile__avatar-edit"
+                onClick={() => setShowAvatarModal(true)}
+                disabled={isUploadingAvatar}
+                title="Nhấp để thay đổi avatar"
+              >
                 <FiEdit2 size={14} />
               </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleAvatarUpload}
+                disabled={isUploadingAvatar}
+              />
             </div>
             <div className="profile__header-info">
               <h1 className="profile__name">{userDisplayName}</h1>
@@ -376,6 +441,19 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
+
+          {avatarMessage.text && (
+            <div style={{
+              marginTop: "12px",
+              padding: "10px 12px",
+              borderRadius: "4px",
+              color: avatarMessage.type === "error" ? "#d32f2f" : "#2e7d32",
+              backgroundColor: avatarMessage.type === "error" ? "#ffebee" : "#f1f8e9",
+              fontSize: "14px",
+            }}>
+              {avatarMessage.text}
+            </div>
+          )}
 
           {/* Stats */}
           <div className="profile__stats">
@@ -877,6 +955,61 @@ export default function ProfilePage() {
             )}
           </main>
         </div>
+
+        {/* Avatar Modal */}
+        {showAvatarModal && (
+          <div className="profile__modal-overlay" onClick={() => setShowAvatarModal(false)}>
+            <div className="profile__modal" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="profile__modal-close"
+                onClick={() => setShowAvatarModal(false)}
+                title="Đóng"
+              >
+                <FiX size={24} />
+              </button>
+
+              <h2 className="profile__modal-title">Chọn ảnh đại diện</h2>
+
+              <div className="profile__modal-content">
+                <div className="profile__modal-icon">
+                  <FiCamera size={48} />
+                </div>
+                <p className="profile__modal-description">
+                  Chọn một hình ảnh từ thiết bị của bạn
+                </p>
+              </div>
+
+              <div className="profile__modal-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    if (avatarInputRef.current) {
+                      avatarInputRef.current.click();
+                    }
+                  }}
+                  disabled={isUploadingAvatar}
+                >
+                  {isUploadingAvatar ? "Đang tải lên..." : "Chọn ảnh"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowAvatarModal(false)}
+                  disabled={isUploadingAvatar}
+                >
+                  Hủy
+                </button>
+              </div>
+
+              {avatarMessage.text && (
+                <div
+                  className={`profile__modal-message profile__modal-message--${avatarMessage.type}`}
+                >
+                  {avatarMessage.text}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
