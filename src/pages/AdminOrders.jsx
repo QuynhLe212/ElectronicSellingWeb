@@ -27,14 +27,11 @@ export default function AdminOrders() {
         if (ignore) return;
         setErrorMessage(error.message || "Không thể tải đơn hàng.");
       } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
+        if (!ignore) setIsLoading(false);
       }
     };
 
     loadOrders();
-
     return () => {
       ignore = true;
     };
@@ -43,35 +40,34 @@ export default function AdminOrders() {
   const formatPrice = (price) => price.toLocaleString("vi-VN") + "₫";
 
   const statusLabelMap = {
-    pending: "Chờ xử lý",
-    shipping: "Đang giao",
-    delivered: "Đã giao",
-    cancelled: "Đã hủy",
-  };
-
-  const getStatusLabel = (order) => {
-    const status = order?.status;
-    return statusLabelMap[status] || order?.statusLabel || "Chờ xử lý";
+    Pending: "Chờ xử lý",
+    Processing: "Đang xử lý",
+    Shipped: "Đang giao",
+    Delivered: "Đã giao",
+    Cancelled: "Đã hủy",
+    Refunded: "Đã hoàn tiền",
   };
 
   const getStatusClass = (status) => {
     switch (status) {
-      case "delivered":
+      case "Delivered":
         return "status delivered";
-      case "shipping":
-        return "status shipping";
-      case "cancelled":
+      case "Shipped":
+      case "Processing":
+        return "status processing";
+      case "Cancelled":
+      case "Refunded":
         return "status cancelled";
       default:
-        return "status";
+        return "status pending";
     }
   };
 
   const handleViewOrder = async (order) => {
     try {
-      const detail = await getOrderById(order.id || order._id);
+      const detail = await getOrderById(order._id);
       setSelectedOrder(detail || order);
-    } catch (error) {
+    } catch {
       setSelectedOrder(order);
     }
   };
@@ -79,24 +75,10 @@ export default function AdminOrders() {
   const handleUpdateStatus = async (orderId, status) => {
     try {
       const updated = await updateOrderStatus(orderId, { status });
-      setOrders((prev) =>
-        prev.map((o) =>
-          (o.id || o._id) === orderId
-            ? {
-                ...o,
-                ...updated,
-                status,
-                statusLabel: updated?.statusLabel || o.statusLabel,
-              }
-            : o,
-        ),
-      );
-
-      setSelectedOrder((prev) =>
-        prev && (prev.id || prev._id) === orderId
-          ? { ...prev, ...updated, status, statusLabel: updated?.statusLabel || prev.statusLabel }
-          : prev,
-      );
+      setOrders((prev) => prev.map((o) => (o._id === orderId ? { ...o, ...updated, status } : o)));
+      if (selectedOrder && selectedOrder._id === orderId) {
+        setSelectedOrder({ ...selectedOrder, ...updated, status });
+      }
     } catch (error) {
       alert(error.message || "Không thể cập nhật trạng thái đơn hàng.");
     }
@@ -104,13 +86,10 @@ export default function AdminOrders() {
 
   const handleDeleteOrder = async (orderId) => {
     if (!window.confirm("Bạn có chắc muốn xóa đơn hàng này?")) return;
-
     try {
       await deleteOrder(orderId);
-      setOrders((prev) => prev.filter((o) => (o.id || o._id) !== orderId));
-      if (selectedOrder && (selectedOrder.id || selectedOrder._id) === orderId) {
-        setSelectedOrder(null);
-      }
+      setOrders((prev) => prev.filter((o) => o._id !== orderId));
+      if (selectedOrder && selectedOrder._id === orderId) setSelectedOrder(null);
     } catch (error) {
       alert(error.message || "Không thể xóa đơn hàng.");
     }
@@ -119,10 +98,8 @@ export default function AdminOrders() {
   return (
     <div className="admin">
       <AdminSidebar />
-
       <div className="admin__content">
         <h1 className="admin__title">Quản lý đơn hàng</h1>
-
         {isLoading && <p>Đang tải đơn hàng...</p>}
         {errorMessage && <p style={{ color: "var(--danger)" }}>{errorMessage}</p>}
 
@@ -130,7 +107,7 @@ export default function AdminOrders() {
           <table className="admin__table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>Mã đơn</th>
                 <th>Ngày</th>
                 <th>Trạng thái</th>
                 <th>Tổng tiền</th>
@@ -138,39 +115,22 @@ export default function AdminOrders() {
                 <th>Xóa</th>
               </tr>
             </thead>
-
             <tbody>
               {orders.map((order) => (
-                <tr key={order.id || order._id}>
-                  <td className="order-id">{order.id || order._id}</td>
-
-                  <td>
-                    {order.createdAt
-                      ? new Date(order.createdAt).toLocaleDateString("vi-VN")
-                      : order.date}
-                  </td>
-
+                <tr key={order._id}>
+                  <td>{order.orderNumber}</td>
+                  <td>{new Date(order.createdAt).toLocaleDateString("vi-VN")}</td>
                   <td>
                     <span className={getStatusClass(order.status)}>
-                      {getStatusLabel(order)}
+                      {statusLabelMap[order.status] || order.status}
                     </span>
                   </td>
-
-                  <td className="order-price">{formatPrice(Number(order.total || order.totalPrice || 0))}</td>
-
+                  <td>{formatPrice(order.totalPrice)}</td>
                   <td>
-                    <button
-                      className="btn-view"
-                      onClick={() => handleViewOrder(order)}
-                    >
-                      Xem
-                    </button>
+                    <button onClick={() => handleViewOrder(order)}>Xem</button>
                   </td>
-
                   <td>
-                    <button className="btn-view" onClick={() => handleDeleteOrder(order.id || order._id)}>
-                      Xóa
-                    </button>
+                    <button onClick={() => handleDeleteOrder(order._id)}>Xóa</button>
                   </td>
                 </tr>
               ))}
@@ -178,82 +138,112 @@ export default function AdminOrders() {
           </table>
         </div>
 
-        {/* Modal Chi tiết đơn hàng */}
-
         {selectedOrder && (
           <div className="admin-modal">
             <div className="admin-modal-content">
+              {/* Modal header */}
               <div className="modal-header">
-                <h2>Chi tiết đơn hàng</h2>
-
-                <button
-                  className="modal-close"
-                  onClick={() => setSelectedOrder(null)}
-                >
+                <h2>Chi tiết đơn hàng: {selectedOrder.orderNumber}</h2>
+                <button className="modal-close" onClick={() => setSelectedOrder(null)}>
                   ✕
                 </button>
               </div>
 
-              {/* INFO */}
-
-              <div className="order-info">
-                <div>
-                  <span>Mã đơn</span>
-                  <b>{selectedOrder.id}</b>
-                </div>
-
-                <div>
-                  <span>Ngày đặt</span>
-                  <b>{selectedOrder.date}</b>
-                </div>
-
-                <div>
-                  <span>Trạng thái</span>
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                    <span className={getStatusClass(selectedOrder.status)}>
-                      {getStatusLabel(selectedOrder)}
-                    </span>
-                    <select
-                      value={selectedOrder.status || ""}
-                      onChange={(e) =>
-                        handleUpdateStatus(selectedOrder.id || selectedOrder._id, e.target.value)
-                      }
-                    >
-                      <option value="pending">Chờ xử lý</option>
-                      <option value="shipping">Đang giao</option>
-                      <option value="delivered">Đã giao</option>
-                      <option value="cancelled">Đã hủy</option>
-                    </select>
-                  </div>
-                </div>
+              {/* Order Info */}
+              <div className="order-section">
+                <h3>Thông tin đơn hàng</h3>
+                <p>
+                  <strong>Mã đơn:</strong> {selectedOrder.orderNumber}
+                </p>
+                <p>
+                  <strong>Ngày tạo:</strong>{" "}
+                  {new Date(selectedOrder.createdAt).toLocaleString("vi-VN")}
+                </p>
+                <p>
+                  <strong>Trạng thái:</strong>
+                  <span
+                    className={getStatusClass(selectedOrder.status)}
+                    style={{ marginLeft: "8px" }}
+                  >
+                    {statusLabelMap[selectedOrder.status] || selectedOrder.status}
+                  </span>
+                </p>
               </div>
 
-              {/* PRODUCT LIST */}
+              {/* Shipping Info */}
+              <div className="order-section">
+                <h3>Thông tin giao hàng</h3>
+                <p>
+                  <strong>Người nhận:</strong> {selectedOrder.shippingAddress?.fullName}
+                </p>
+                <p>
+                  <strong>Điện thoại:</strong> {selectedOrder.shippingAddress?.phone}
+                </p>
+                <p>
+                  <strong>Địa chỉ:</strong>
+                  {[
+                    selectedOrder.shippingAddress?.address,
+                    selectedOrder.shippingAddress?.ward,
+                    selectedOrder.shippingAddress?.district,
+                    selectedOrder.shippingAddress?.city,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                </p>
+                <p>
+                  <strong>Ghi chú:</strong> {selectedOrder.shippingAddress?.note || "—"}
+                </p>
+              </div>
 
-              <h3 className="order-product-title">Sản phẩm</h3>
+              {/* Payment Info */}
+              <div className="order-section">
+                <h3>Thông tin thanh toán</h3>
+                <p>
+                  <strong>Phương thức:</strong> {selectedOrder.paymentMethod}
+                </p>
+                <p>
+                  <strong>Trạng thái thanh toán:</strong>{" "}
+                  {selectedOrder.isPaid ? "Đã thanh toán" : "Chưa thanh toán"}
+                </p>
+              </div>
 
-              <div className="order-items">
-                {(selectedOrder.items || selectedOrder.orderItems || []).map((item, index) => (
-                  <div className="order-item" key={index}>
-                    <img src={item.image} alt="" />
-
-                    <div className="order-item-info">
-                      <p className="item-name">{item.product || item.name}</p>
-
-                      <p className="item-qty">Số lượng: {item.qty || item.quantity}</p>
+              {/* Products */}
+              <div className="order-section">
+                <h3>Sản phẩm</h3>
+                <div className="order-items">
+                  {(selectedOrder.orderItems || []).map((item, idx) => (
+                    <div className="order-item" key={idx}>
+                      <img src={item.image} alt={item.name} className="item-image" />
+                      <div className="item-info">
+                        <p className="item-name">{item.name}</p>
+                        <p className="item-qty">Số lượng: {item.quantity}</p>
+                      </div>
+                      <div className="item-price">{formatPrice(item.price)}</div>
                     </div>
-
-                    <div className="item-price">{formatPrice(item.price)}</div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              {/* TOTAL */}
+              {/* Total & Status Update */}
+              <div className="order-section order-footer">
+                <div className="total-box">
+                  <span>Tổng tiền:</span>
+                  <b>{formatPrice(selectedOrder.totalPrice)}</b>
+                </div>
 
-              <div className="order-total-box">
-                <span>Tổng tiền</span>
-
-                <b>{formatPrice(Number(selectedOrder.total || selectedOrder.totalPrice || 0))}</b>
+                <div className="status-update">
+                  <label>Thay đổi trạng thái:</label>
+                  <select
+                    value={selectedOrder.status}
+                    onChange={(e) => handleUpdateStatus(selectedOrder._id, e.target.value)}
+                  >
+                    {Object.keys(statusLabelMap).map((key) => (
+                      <option key={key} value={key}>
+                        {statusLabelMap[key]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           </div>

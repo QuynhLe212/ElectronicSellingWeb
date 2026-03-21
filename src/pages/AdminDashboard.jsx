@@ -57,7 +57,7 @@ export default function AdminDashboard() {
 
   const totalRevenue = useMemo(
     () => orders.reduce((sum, order) => sum + Number(order.total || order.totalPrice || 0), 0),
-    [orders],
+    [orders]
   );
 
   // ===== STATS =====
@@ -87,16 +87,20 @@ export default function AdminDashboard() {
 
   // ===== DATA CHART =====
 
-  const revenueData = useMemo(
-    () =>
-      orders.map((o) => ({
-        month: o.createdAt
-          ? new Date(o.createdAt).toLocaleDateString("vi-VN", { month: "2-digit" })
-          : (o.date?.slice(3, 5) || "--"),
-        revenue: Number(o.total || o.totalPrice || 0),
-      })),
-    [orders],
-  );
+  const revenueData = useMemo(() => {
+    const monthlyMap = {};
+
+    orders.forEach((o) => {
+      const date = o.createdAt ? new Date(o.createdAt) : new Date();
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+      monthlyMap[monthKey] = (monthlyMap[monthKey] || 0) + Number(o.total || o.totalPrice || 0);
+    });
+
+    return Object.entries(monthlyMap)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, revenue]) => ({ month, revenue }));
+  }, [orders]);
 
   return (
     <div className="admin">
@@ -145,12 +149,7 @@ export default function AdminDashboard() {
 
               <Tooltip formatter={(v) => formatPrice(v)} />
 
-              <Line
-                type="monotone"
-                dataKey="revenue"
-                stroke="#6366f1"
-                strokeWidth={3}
-              />
+              <Line type="monotone" dataKey="revenue" stroke="#6366f1" strokeWidth={3} />
             </LineChart>
           </ResponsiveContainer>
         </div>
