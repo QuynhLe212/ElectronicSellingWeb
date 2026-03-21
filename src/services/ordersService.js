@@ -1,4 +1,4 @@
-ï»¿import { apiClient } from "./apiClient";
+import { apiClient } from "./apiClient";
 import { mockOrders } from "../data/data";
 
 const LOCAL_ORDERS_KEY = "local_orders_data";
@@ -7,11 +7,11 @@ const isNetworkError = (error) =>
     String(error ?.message || "").toLowerCase().includes("khong the ket noi den may chu");
 
 const statusLabelMap = {
-    pending: "Chá» xá»­ lÃ½",
-    processing: "Äang xá»­ lÃ½",
-    shipping: "Äang giao",
-    delivered: "ÄÃ£ giao",
-    cancelled: "ÄÃ£ há»§y",
+    pending: "Ch? x? lý",
+    processing: "Ðang x? lý",
+    shipping: "Ðang giao",
+    delivered: "Ðã giao",
+    cancelled: "Ðã h?y",
 };
 
 const apiStatusMap = {
@@ -35,14 +35,14 @@ const normalizeStatusValue = (status) => {
 const normalizeStatusLabel = (status, statusLabel) => {
     if (statusLabel) {
         const normalized = String(statusLabel).trim().toLowerCase();
-        if (normalized === "cho xu ly") return "Chá» xá»­ lÃ½";
-        if (normalized === "dang giao") return "Äang giao";
-        if (normalized === "da giao") return "ÄÃ£ giao";
-        if (normalized === "da huy") return "ÄÃ£ há»§y";
+        if (normalized === "cho xu ly") return "Ch? x? lý";
+        if (normalized === "dang giao") return "Ðang giao";
+        if (normalized === "da giao") return "Ðã giao";
+        if (normalized === "da huy") return "Ðã h?y";
         return statusLabel;
     }
 
-    return statusLabelMap[status] || "Chá» xá»­ lÃ½";
+    return statusLabelMap[status] || "Ch? x? lý";
 };
 
 const toNumber = (value, fallback = 0) => {
@@ -125,16 +125,73 @@ const extractOrders = (payload) => {
     return raw.map(toOrder);
 };
 
-export const getOrdersAdmin = async() => {
+const extractOrdersMeta = (payload, orders) => ({
+    pagination: {
+        page: payload ?.pagination ?.page || payload ?.page || 1,
+        limit: payload ?.pagination ?.limit || payload ?.limit || (orders.length || 1),
+        totalPages: payload ?.pagination ?.totalPages || payload ?.pages || 1,
+        totalOrders: payload ?.pagination ?.totalOrders ||
+            payload ?.total ||
+            payload ?.count ||
+            orders.length,
+    },
+    statistics: {
+        totalRevenue: toNumber(payload ?.statistics ?.totalRevenue, 0),
+        averageOrderValue: toNumber(payload ?.statistics ?.averageOrderValue, 0),
+    },
+});
+
+export const getOrdersAdmin = async(params = {}, options = {}) => {
+    const { withMeta = false } = options;
+
     try {
-        const response = await apiClient.get("/orders", { auth: true });
-        return extractOrders(response);
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === "") return;
+            query.set(key, String(value));
+        });
+
+        const suffix = query.toString() ? `?${query.toString()}` : "";
+        const response = await apiClient.get(`/orders${suffix}`, { auth: true });
+        const orders = extractOrders(response);
+
+        if (!withMeta) {
+            return orders;
+        }
+
+        return {
+            orders,
+            ...extractOrdersMeta(response, orders),
+        };
     } catch (error) {
         if (!isNetworkError(error)) {
             throw error;
         }
 
-        return readLocalOrders().map(toOrder);
+        const orders = readLocalOrders().map(toOrder);
+
+        if (!withMeta) {
+            return orders;
+        }
+
+        const totalRevenue = orders.reduce(
+            (sum, order) => sum + toNumber(order.total || order.totalPrice, 0),
+            0
+        );
+
+        return {
+            orders,
+            pagination: {
+                page: 1,
+                limit: orders.length || 1,
+                totalPages: 1,
+                totalOrders: orders.length,
+            },
+            statistics: {
+                totalRevenue,
+                averageOrderValue: orders.length > 0 ? totalRevenue / orders.length : 0,
+            },
+        };
     }
 };
 

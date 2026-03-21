@@ -26,10 +26,14 @@ function ScrollToTop() {
 }
 
 function App() {
+  const location = useLocation();
+  const isAdminRoute =
+    location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+
   return (
     <div className="page-wrapper">
       <ScrollToTop />
-      <Header />
+      {!isAdminRoute && <Header />}
       <main className="page-content">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -49,7 +53,7 @@ function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
         </Routes>
       </main>
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </div>
   );
 }
