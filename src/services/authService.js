@@ -189,12 +189,12 @@ export const uploadAvatar = async(file) => {
         const formData = new FormData();
         formData.append("avatar", file);
         const data = await apiClient.post(
-            "/auth/upload-avatar",
+            "/users/avatar",
             formData, { auth: true }
         );
-        if (data && data.user) {
+        if (data && (data.user || data.avatar)) {
             const currentUser = JSON.parse(localStorage.getItem("user_data") || "{}");
-            const updatedUser = Object.assign({}, currentUser, data.user);
+            const updatedUser = Object.assign({}, currentUser, data.user || {}, data.avatar ? { avatar: data.avatar } : {});
             localStorage.setItem("user_data", JSON.stringify(updatedUser));
         }
         return data;

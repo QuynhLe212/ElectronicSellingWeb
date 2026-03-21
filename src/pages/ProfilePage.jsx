@@ -343,8 +343,8 @@ export default function ProfilePage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setAvatarMessage({ type: "error", text: "Kích thước file không được vượt quá 5MB." });
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarMessage({ type: "error", text: "Kích thước file không được vượt quá 2MB." });
       return;
     }
 
@@ -353,7 +353,9 @@ export default function ProfilePage() {
       setAvatarMessage({ type: "", text: "" });
 
       const response = await uploadAvatar(file);
-      const avatarUrl = response && response.user && response.user.avatar && response.user.avatar.url;
+      const avatarUrl =
+        (response && response.avatar && response.avatar.url) ||
+        (response && response.user && response.user.avatar && response.user.avatar.url);
 
       if (avatarUrl) {
         setUserInfo((prev) => ({
