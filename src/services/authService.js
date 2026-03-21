@@ -1,16 +1,17 @@
-﻿import { apiClient } from "./apiClient";
+import { apiClient } from "./apiClient";
 
 const LOCAL_AUTH_USER_KEY = "local_auth_user";
 const LOCAL_AUTH_PASSWORD_KEY = "local_auth_password";
-const AUTH_SESSION_EVENT = "auth:session-changed";
 
-const isNetworkError = (error) =>
-    String(error ?.message || "").toLowerCase().includes("khong the ket noi den may chu");
+const isNetworkError = (error) => {
+    if (!error) return false;
+    const msg = String(error.message || "").toLowerCase();
+    return msg.includes("khong the ket noi den may chu");
+};
 
 const getLocalAuthUser = () => {
     const raw = localStorage.getItem(LOCAL_AUTH_USER_KEY);
     if (!raw) return null;
-
     try {
         return JSON.parse(raw);
     } catch {
@@ -25,18 +26,17 @@ const saveLocalAuthUser = (user, password) => {
     }
 };
 
-const emitAuthSessionChanged = () => {
-    window.dispatchEvent(new CustomEvent(AUTH_SESSION_EVENT));
-};
-
 const saveSession = (payload) => {
-    const { token, user } = payload;
+    const token = payload.token;
+    const user = payload.user;
     localStorage.setItem("user_token", token);
     localStorage.setItem("user_data", JSON.stringify(user));
-    localStorage.setItem("user_email", user ?.email || "");
-    localStorage.setItem("user_name", user ?.name || "");
-    localStorage.setItem("user_role", user ?.role || "user");
-    emitAuthSessionChanged();
+    const userEmail = user && user.email ? user.email : "";
+    const userName = user && user.name ? user.name : "";
+    const userRole = user && user.role ? user.role : "user";
+    localStorage.setItem("user_email", userEmail);
+    localStorage.setItem("user_name", userName);
+    localStorage.setItem("user_role", userRole);
 };
 
 export const clearSession = () => {
@@ -45,7 +45,6 @@ export const clearSession = () => {
     localStorage.removeItem("user_email");
     localStorage.removeItem("user_name");
     localStorage.removeItem("user_role");
-    emitAuthSessionChanged();
 };
 
 export const login = async({ email, password }) => {
@@ -57,14 +56,11 @@ export const login = async({ email, password }) => {
         if (!isNetworkError(error)) {
             throw error;
         }
-
         const localUser = getLocalAuthUser();
         const localPassword = localStorage.getItem(LOCAL_AUTH_PASSWORD_KEY);
-
         if (!localUser || localUser.email !== email || localPassword !== password) {
             throw new Error("Thong tin dang nhap khong dung.");
         }
-
         const data = {
             token: "local-demo-token",
             user: localUser,
@@ -88,7 +84,6 @@ export const register = async({ name, email, phone, password }) => {
         if (!isNetworkError(error)) {
             throw error;
         }
-
         const user = {
             id: Date.now(),
             name,
@@ -97,9 +92,7 @@ export const register = async({ name, email, phone, password }) => {
             role: "user",
             createdAt: new Date().toISOString(),
         };
-
         saveLocalAuthUser(user, password);
-
         const data = {
             token: "local-demo-token",
             user,
@@ -112,24 +105,24 @@ export const register = async({ name, email, phone, password }) => {
 export const getMe = async() => {
     try {
         const data = await apiClient.get("/auth/me", { auth: true });
-        if (data ?.user) {
+        if (data && data.user) {
             localStorage.setItem("user_data", JSON.stringify(data.user));
-            localStorage.setItem("user_email", data.user.email || "");
-            localStorage.setItem("user_name", data.user.name || "");
-            localStorage.setItem("user_role", data.user.role || "user");
-            emitAuthSessionChanged();
+            const userEmail = data.user.email || "";
+            const userName = data.user.name || "";
+            const userRole = data.user.role || "user";
+            localStorage.setItem("user_email", userEmail);
+            localStorage.setItem("user_name", userName);
+            localStorage.setItem("user_role", userRole);
         }
         return data;
     } catch (error) {
         if (!isNetworkError(error)) {
             throw error;
         }
-
         const localUser = getLocalAuthUser();
         if (!localUser) {
             throw new Error("Khong tim thay thong tin tai khoan local.");
         }
-
         return { user: localUser };
     }
 };
@@ -137,43 +130,34 @@ export const getMe = async() => {
 export const updateMyProfile = async({ name, phone, address }) => {
     try {
         const data = await apiClient.put(
-            "/auth/profile", { name, phone, address }, { auth: true },
+            "/auth/profile", { name, phone, address }, { auth: true }
         );
-
-        if (data ?.user) {
+        if (data && data.user) {
             localStorage.setItem("user_data", JSON.stringify(data.user));
             localStorage.setItem("user_email", data.user.email || "");
             localStorage.setItem("user_name", data.user.name || "");
             localStorage.setItem("user_role", data.user.role || "user");
-            emitAuthSessionChanged();
         }
-
         return data;
     } catch (error) {
         if (!isNetworkError(error)) {
             throw error;
         }
-
         const currentUser = getLocalAuthUser();
         if (!currentUser) {
             throw new Error("Khong tim thay thong tin tai khoan local.");
         }
-
         const updatedUser = {
             ...currentUser,
             name: name || currentUser.name,
             phone: phone || currentUser.phone,
             address: address || currentUser.address,
         };
-
         saveLocalAuthUser(updatedUser);
-
         localStorage.setItem("user_data", JSON.stringify(updatedUser));
         localStorage.setItem("user_email", updatedUser.email || "");
         localStorage.setItem("user_name", updatedUser.name || "");
         localStorage.setItem("user_role", updatedUser.role || "user");
-        emitAuthSessionChanged();
-
         return { user: updatedUser };
     }
 };
@@ -181,18 +165,16 @@ export const updateMyProfile = async({ name, phone, address }) => {
 export const changeMyPassword = async({ currentPassword, newPassword }) => {
     try {
         return await apiClient.put(
-            "/auth/change-password", { currentPassword, newPassword }, { auth: true },
+            "/auth/change-password", { currentPassword, newPassword }, { auth: true }
         );
     } catch (error) {
         if (!isNetworkError(error)) {
             throw error;
         }
-
         const localPassword = localStorage.getItem(LOCAL_AUTH_PASSWORD_KEY);
         if (localPassword && localPassword !== currentPassword) {
             throw new Error("Mat khau hien tai khong dung.");
         }
-
         localStorage.setItem(LOCAL_AUTH_PASSWORD_KEY, newPassword);
         return { message: "Doi mat khau thanh cong." };
     }
@@ -200,4 +182,37 @@ export const changeMyPassword = async({ currentPassword, newPassword }) => {
 
 export const logout = async() => {
     return apiClient.post("/auth/logout", {}, { auth: true });
+};
+
+export const uploadAvatar = async(file) => {
+    try {
+        const formData = new FormData();
+        formData.append("avatar", file);
+        const data = await apiClient.post(
+            "/users/avatar",
+            formData, { auth: true }
+        );
+        if (data && (data.user || data.avatar)) {
+            const currentUser = JSON.parse(localStorage.getItem("user_data") || "{}");
+            const updatedUser = Object.assign({}, currentUser, data.user || {}, data.avatar ? { avatar: data.avatar } : {});
+            localStorage.setItem("user_data", JSON.stringify(updatedUser));
+        }
+        return data;
+    } catch (error) {
+        if (!isNetworkError(error)) {
+            throw error;
+        }
+        const localUser = getLocalAuthUser();
+        if (!localUser) {
+            throw new Error("Khong the tai avatar len.");
+        }
+        const fileUrl = URL.createObjectURL(file);
+        const updatedUser = {
+            ...localUser,
+            avatar: { url: fileUrl },
+        };
+        saveLocalAuthUser(updatedUser);
+        localStorage.setItem("user_data", JSON.stringify(updatedUser));
+        return { user: updatedUser };
+    }
 };
