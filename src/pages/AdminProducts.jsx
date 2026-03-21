@@ -45,7 +45,7 @@ export default function AdminProducts() {
     brand: "",
     category: "",
     imageFiles: [],
-    imagePreview: "",
+    imagePreviews: [],
   });
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function AdminProducts() {
       brand: "",
       category: "",
       imageFiles: [],
-      imagePreview: "",
+      imagePreviews: [],
     });
     setEditingProductId(null);
   };
@@ -161,9 +161,12 @@ export default function AdminProducts() {
   };
 
   const openEditForm = (product) => {
-    const firstImage = getImageUrl(product.image) || getImageUrl(product.images?.[0]) || "";
+    const images =
+      product.images?.map((img) => getImageUrl(img)) ||
+      (product.image ? [getImageUrl(product.image)] : []);
 
     setEditingProductId(product.id);
+
     setNewProduct({
       name: product.name || "",
       description: product.description || "",
@@ -173,15 +176,18 @@ export default function AdminProducts() {
       brand: product.brand || "",
       category: product.category || "",
       imageFiles: [],
-      imagePreview: firstImage,
+      imagePreviews: images,
     });
-    setShowForm(true);
+
+    setShowForm(true); // ❗ thiếu cái này trước đó
   };
 
   // 🔥 FILTER
-  const filtered = productList.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = productList.filter((p) =>
+    (p.name || "").toLowerCase().includes(search.toLowerCase())
+  );
 
-  // 🔥 PAGINATION LOGIC
+  // 🔥 PAGINATION
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
 
   const paginatedProducts = filtered.slice(
@@ -189,6 +195,31 @@ export default function AdminProducts() {
     currentPage * itemsPerPage
   );
 
+  const getPagination = () => {
+    const pages = [];
+
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+
+      if (currentPage > 3) pages.push("...");
+
+      for (
+        let i = Math.max(2, currentPage - 1);
+        i <= Math.min(totalPages - 1, currentPage + 1);
+        i++
+      ) {
+        pages.push(i);
+      }
+
+      if (currentPage < totalPages - 2) pages.push("...");
+
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
   return (
     <div className="admin">
       <AdminSidebar />
@@ -294,15 +325,35 @@ export default function AdminProducts() {
             ←
           </button>
 
-          {Array.from({ length: totalPages }, (_, i) => (
-            <button
-              key={i}
-              className={currentPage === i + 1 ? "active" : ""}
-              onClick={() => setCurrentPage(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))}
+          {getPagination().map((p, i) =>
+            p === "..." ? (
+              <input
+                key={i}
+                type="number"
+                min="1"
+                max={totalPages}
+                placeholder="..."
+                className="page-input"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    let val = Number(e.target.value);
+                    if (val >= 1 && val <= totalPages) {
+                      setCurrentPage(val);
+                    }
+                    e.target.value = "";
+                  }
+                }}
+              />
+            ) : (
+              <button
+                key={i}
+                className={currentPage === p ? "active" : ""}
+                onClick={() => setCurrentPage(p)}
+              >
+                {p}
+              </button>
+            )
+          )}
 
           <button
             disabled={currentPage === totalPages}
@@ -414,20 +465,43 @@ export default function AdminProducts() {
                   multiple
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
-                    const preview = files.length > 0 ? URL.createObjectURL(files[0]) : "";
+                    const previews = files.map((file) => URL.createObjectURL(file));
 
-                    setNewProduct({
-                      ...newProduct,
-                      imageFiles: files,
-                      imagePreview: preview,
-                    });
+                    setNewProduct((prev) => ({
+                      ...prev,
+                      imageFiles: [...prev.imageFiles, ...files],
+                      imagePreviews: [...prev.imagePreviews, ...previews],
+                    }));
                   }}
                 />
               </div>
 
-              {newProduct.imagePreview && (
-                <div className="image-preview-box">
-                  <img src={newProduct.imagePreview} alt="" />
+              {newProduct.imagePreviews.length > 0 && (
+                <div className="preview-grid">
+                  {newProduct.imagePreviews.map((src, index) => (
+                    <div key={index} className="preview-item">
+                      <img src={src} alt="" />
+
+                      <button
+                        className="remove-img"
+                        onClick={() => {
+                          const newFiles = [...newProduct.imageFiles];
+                          const newPreviews = [...newProduct.imagePreviews];
+
+                          newFiles.splice(index, 1);
+                          newPreviews.splice(index, 1);
+
+                          setNewProduct({
+                            ...newProduct,
+                            imageFiles: newFiles,
+                            imagePreviews: newPreviews,
+                          });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
