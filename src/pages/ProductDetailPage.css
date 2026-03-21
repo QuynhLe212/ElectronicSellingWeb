@@ -1,4 +1,5 @@
 /* Breadcrumb */
+
 .pdp__breadcrumb {
     display: flex;
     align-items: center;
@@ -23,14 +24,18 @@
     font-weight: 600;
 }
 
+
 /* Main Layout */
+
 .pdp__main {
     display: flex;
     gap: 60px;
     margin-bottom: 80px;
 }
 
+
 /* ===== GALLERY ===== */
+
 .pdp__gallery {
     flex: 1;
     max-width: 55%;
@@ -112,7 +117,9 @@
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
+
 /* ===== INFO ===== */
+
 .pdp__info {
     flex: 1;
 }
@@ -195,7 +202,9 @@
     color: var(--gray-700);
 }
 
+
 /* Options */
+
 .pdp__option {
     margin-bottom: 20px;
 }
@@ -250,6 +259,11 @@
     background: var(--gray-100);
 }
 
+.pdp__quantity button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .pdp__quantity span {
     padding: 10px 20px;
     font-weight: 600;
@@ -260,7 +274,20 @@
     text-align: center;
 }
 
+.pdp__stock-note {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--gray-600);
+    font-weight: 600;
+}
+
+.pdp__stock-note--danger {
+    color: var(--danger);
+}
+
+
 /* CTA */
+
 .pdp__cta-row {
     display: flex;
     gap: 12px;
@@ -296,7 +323,9 @@
     color: var(--primary);
 }
 
+
 /* Trust */
+
 .pdp__trust {
     display: flex;
     gap: 16px;
@@ -327,7 +356,9 @@
     color: var(--gray-500);
 }
 
+
 /* ===== TABS ===== */
+
 .pdp__tabs {
     margin-bottom: 60px;
     background: var(--white);
@@ -391,7 +422,9 @@
     color: var(--success);
 }
 
+
 /* Specs Table */
+
 .pdp__specs-table {
     width: 100%;
     border-collapse: collapse;
@@ -417,7 +450,9 @@
     color: var(--gray-600);
 }
 
+
 /* Reviews */
+
 .pdp__reviews-summary {
     display: flex;
     gap: 40px;
@@ -532,7 +567,9 @@
     color: var(--gray-600);
 }
 
+
 /* ===== LIGHTBOX ===== */
+
 .pdp__lightbox {
     position: fixed;
     top: 0;
@@ -599,25 +636,26 @@
     border-radius: var(--radius-md);
 }
 
+
 /* Cross-sell */
+
 .pdp__cross-sell {
     border-top: 1px solid var(--gray-200);
 }
 
+
 /* ===== RESPONSIVE ===== */
+
 @media (max-width: 1024px) {
     .pdp__main {
         gap: 32px;
     }
-
     .pdp__title {
         font-size: 24px;
     }
-
     .pdp__price {
         font-size: 26px;
     }
-
     .pdp__trust {
         flex-direction: column;
         gap: 12px;
@@ -628,20 +666,16 @@
     .pdp__main {
         flex-direction: column;
     }
-
     .pdp__gallery {
         max-width: 100%;
     }
-
     .pdp__cta-row {
         flex-direction: column;
     }
-
     .pdp__reviews-summary {
         flex-direction: column;
         gap: 20px;
     }
-
     .products-grid {
         grid-template-columns: repeat(2, 1fr);
     }

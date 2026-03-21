@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   FiUser,
   FiPackage,
@@ -57,6 +57,9 @@ function formatMemberSince(dateString) {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const availableTabs = ["overview", "orders", "addresses", "settings"];
+  const tabFromQuery = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState("overview");
   const [editingProfile, setEditingProfile] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
@@ -131,6 +134,21 @@ export default function ProfilePage() {
       .filter(Boolean)
       .join(", ");
   }, [addressData]);
+
+  useEffect(() => {
+    if (tabFromQuery && availableTabs.includes(tabFromQuery)) {
+      setActiveTab(tabFromQuery);
+    }
+  }, [tabFromQuery]);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams((prevParams) => {
+      const nextParams = new URLSearchParams(prevParams);
+      nextParams.set("tab", tabId);
+      return nextParams;
+    });
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("user_token");
@@ -411,7 +429,7 @@ export default function ProfilePage() {
                         navigate("/admin");
                       }
                     } else {
-                      setActiveTab(tab.id);
+                      handleTabChange(tab.id);
                     }
                   }}
                 >

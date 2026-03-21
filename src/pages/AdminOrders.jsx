@@ -12,6 +12,7 @@ export default function AdminOrders() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [statusFeedback, setStatusFeedback] = useState({ type: "", text: "" });
 
   useEffect(() => {
     let ignore = false;
@@ -44,6 +45,7 @@ export default function AdminOrders() {
 
   const statusLabelMap = {
     pending: "Chờ xử lý",
+    processing: "Đang xử lý",
     shipping: "Đang giao",
     delivered: "Đã giao",
     cancelled: "Đã hủy",
@@ -68,16 +70,24 @@ export default function AdminOrders() {
   };
 
   const handleViewOrder = async (order) => {
+    setSelectedOrder(order);
+
     try {
       const detail = await getOrderById(order.id || order._id);
-      setSelectedOrder(detail || order);
+      if (detail) {
+        setSelectedOrder((prev) => ({
+          ...prev,
+          ...detail,
+        }));
+      }
     } catch (error) {
-      setSelectedOrder(order);
+      // Giữ dữ liệu từ danh sách nếu không lấy được chi tiết từ API.
     }
   };
 
   const handleUpdateStatus = async (orderId, status) => {
     try {
+      setStatusFeedback({ type: "", text: "" });
       const updated = await updateOrderStatus(orderId, { status });
       setOrders((prev) =>
         prev.map((o) =>
@@ -85,7 +95,7 @@ export default function AdminOrders() {
             ? {
                 ...o,
                 ...updated,
-                status,
+                status: updated?.status || status,
                 statusLabel: updated?.statusLabel || o.statusLabel,
               }
             : o,
@@ -94,11 +104,21 @@ export default function AdminOrders() {
 
       setSelectedOrder((prev) =>
         prev && (prev.id || prev._id) === orderId
-          ? { ...prev, ...updated, status, statusLabel: updated?.statusLabel || prev.statusLabel }
+          ? {
+              ...prev,
+              ...updated,
+              status: updated?.status || status,
+              statusLabel: updated?.statusLabel || prev.statusLabel,
+            }
           : prev,
       );
+
+      setStatusFeedback({ type: "success", text: "Cập nhật trạng thái đơn hàng thành công." });
     } catch (error) {
-      alert(error.message || "Không thể cập nhật trạng thái đơn hàng.");
+      setStatusFeedback({
+        type: "error",
+        text: error.message || "Không thể cập nhật trạng thái đơn hàng.",
+      });
     }
   };
 
@@ -194,32 +214,44 @@ export default function AdminOrders() {
                 </button>
               </div>
 
+              {statusFeedback.text && (
+                <p className={`modal-feedback modal-feedback--${statusFeedback.type}`}>
+                  {statusFeedback.text}
+                </p>
+              )}
+
               {/* INFO */}
 
               <div className="order-info">
-                <div>
+                <div className="order-info__row">
                   <span>Mã đơn</span>
-                  <b>{selectedOrder.id}</b>
+                  <b>{selectedOrder.id || selectedOrder._id || "-"}</b>
                 </div>
 
-                <div>
+                <div className="order-info__row">
                   <span>Ngày đặt</span>
-                  <b>{selectedOrder.date}</b>
+                  <b>
+                    {selectedOrder.createdAt
+                      ? new Date(selectedOrder.createdAt).toLocaleDateString("vi-VN")
+                      : selectedOrder.date || "-"}
+                  </b>
                 </div>
 
-                <div>
+                <div className="order-info__row order-info__row--status">
                   <span>Trạng thái</span>
-                  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <div className="order-status-wrap">
                     <span className={getStatusClass(selectedOrder.status)}>
                       {getStatusLabel(selectedOrder)}
                     </span>
                     <select
+                      className="order-status-select"
                       value={selectedOrder.status || ""}
                       onChange={(e) =>
                         handleUpdateStatus(selectedOrder.id || selectedOrder._id, e.target.value)
                       }
                     >
                       <option value="pending">Chờ xử lý</option>
+                      <option value="processing">Đang xử lý</option>
                       <option value="shipping">Đang giao</option>
                       <option value="delivered">Đã giao</option>
                       <option value="cancelled">Đã hủy</option>
@@ -235,10 +267,10 @@ export default function AdminOrders() {
               <div className="order-items">
                 {(selectedOrder.items || selectedOrder.orderItems || []).map((item, index) => (
                   <div className="order-item" key={index}>
-                    <img src={item.image} alt="" />
+                    <img src={item.image || "https://picsum.photos/seed/order-item/80/80"} alt={item.name || item.product?.name || "Sản phẩm"} />
 
                     <div className="order-item-info">
-                      <p className="item-name">{item.product || item.name}</p>
+                      <p className="item-name">{item.name || item.product?.name || String(item.product || "Sản phẩm")}</p>
 
                       <p className="item-qty">Số lượng: {item.qty || item.quantity}</p>
                     </div>

@@ -1,8 +1,17 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { FiMail, FiMapPin, FiPhone } from 'react-icons/fi';
 import './Footer.css';
 
 export default function Footer() {
+    const location = useLocation();
+
+    const handleHomeLinkClick = (event) => {
+        if (location.pathname === '/') {
+            event.preventDefault();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    };
+
     return (
         <footer className="footer">
             {/* Footer chính */}
@@ -27,22 +36,22 @@ export default function Footer() {
                     {/* Liên kết nhanh */}
                     <div className="footer__col">
                         <h4 className="footer__heading">Liên kết nhanh</h4>
-                        <Link to="/" className="footer__link">Trang chủ</Link>
+                        <Link to="/" className="footer__link" onClick={handleHomeLinkClick}>Trang chủ</Link>
                         <Link to="/products" className="footer__link">Tất cả sản phẩm</Link>
                         <Link to="/products?category=smartphones" className="footer__link">Điện thoại</Link>
                         <Link to="/products?category=laptops" className="footer__link">Laptop</Link>
                         <Link to="/products?category=audio" className="footer__link">Âm thanh</Link>
-                        <Link to="/products" className="footer__link">Khuyến mãi</Link>
+                        <Link to="/products?deal=sale" className="footer__link">Khuyến mãi</Link>
                     </div>
 
                     {/* Chăm sóc khách hàng */}
                     <div className="footer__col">
                         <h4 className="footer__heading">Chăm sóc khách hàng</h4>
-                        <a href="#" className="footer__link">Tài khoản của tôi</a>
-                        <a href="#" className="footer__link">Theo dõi đơn hàng</a>
-                        <a href="#" className="footer__link">Đổi trả & Hoàn tiền</a>
-                        <a href="#" className="footer__link">Thông tin vận chuyển</a>
-                        <a href="#" className="footer__link">Câu hỏi thường gặp</a>
+                        <Link to="/profile?tab=overview" className="footer__link">Tài khoản của tôi</Link>
+                        <Link to="/profile?tab=orders" className="footer__link">Theo dõi đơn hàng</Link>
+                        <Link to="/returns-refunds" className="footer__link">Đổi trả & Hoàn tiền</Link>
+                        <Link to="/profile?tab=addresses" className="footer__link">Thông tin vận chuyển</Link>
+                        <Link to="/faq" className="footer__link">Câu hỏi thường gặp</Link>
                     </div>
                 </div>
             </div>

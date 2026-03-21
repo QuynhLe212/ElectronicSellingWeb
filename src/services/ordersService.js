@@ -1,4 +1,4 @@
-import { apiClient } from "./apiClient";
+﻿import { apiClient } from "./apiClient";
 import { mockOrders } from "../data/data";
 
 const LOCAL_ORDERS_KEY = "local_orders_data";
@@ -8,9 +8,28 @@ const isNetworkError = (error) =>
 
 const statusLabelMap = {
     pending: "Chờ xử lý",
+    processing: "Đang xử lý",
     shipping: "Đang giao",
     delivered: "Đã giao",
     cancelled: "Đã hủy",
+};
+
+const apiStatusMap = {
+    pending: "Pending",
+    processing: "Processing",
+    shipping: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+};
+
+const normalizeStatusValue = (status) => {
+    const normalized = String(status || "").trim().toLowerCase();
+    if (["pending"].includes(normalized)) return "pending";
+    if (["processing"].includes(normalized)) return "processing";
+    if (["shipping", "shipped"].includes(normalized)) return "shipping";
+    if (["delivered"].includes(normalized)) return "delivered";
+    if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
+    return "pending";
 };
 
 const normalizeStatusLabel = (status, statusLabel) => {
@@ -92,11 +111,12 @@ const toOrder = (order) => ({
     ...order,
     id: order ?.id || order ?._id,
     _id: order ?._id || order ?.id,
+    status: normalizeStatusValue(order ?.status),
     orderItems: normalizeOrderItems(order),
     items: normalizeOrderItems(order),
     total: toNumber(order ?.total || order ?.totalPrice, 0),
     totalPrice: toNumber(order ?.totalPrice || order ?.total, 0),
-    statusLabel: normalizeStatusLabel(order ?.status, order ?.statusLabel),
+    statusLabel: normalizeStatusLabel(normalizeStatusValue(order ?.status), order ?.statusLabel),
 });
 
 const extractOrders = (payload) => {
@@ -164,7 +184,7 @@ export const createOrder = async(payload) => {
 
 export const getMyOrders = async() => {
     try {
-        const response = await apiClient.get("/orders/myorders", { auth: true });
+        const response = await apiClient.get("/orders/my-orders", { auth: true });
         return extractOrders(response);
     } catch (error) {
         if (!isNetworkError(error)) {
@@ -192,7 +212,14 @@ export const getOrderById = async(id) => {
         const order = response ?.order || response ?.data ?.order || response ?.data || response;
         return toOrder(order);
     } catch (error) {
-        if (!isNetworkError(error)) {
+        const message = String(error ?.message || "").toLowerCase();
+        const shouldFallbackToLocal =
+            isNetworkError(error) ||
+            message.includes("validation failed") ||
+            message.includes("invalid id") ||
+            message.includes("invalid id format");
+
+        if (!shouldFallbackToLocal) {
             throw error;
         }
 
@@ -203,7 +230,13 @@ export const getOrderById = async(id) => {
 
 export const updateOrderStatus = async(id, payload) => {
     try {
-        const response = await apiClient.put(`/orders/${id}`, payload, { auth: true });
+        const status = normalizeStatusValue(payload ?.status);
+        const apiStatus = apiStatusMap[status] || "Pending";
+
+        const response = await apiClient.put(`/orders/${id}/status`, {
+            ...payload,
+            status: apiStatus,
+        }, { auth: true });
         const order = response ?.order || response ?.data ?.order || response ?.data || response;
         return toOrder(order);
     } catch (error) {
@@ -221,8 +254,8 @@ export const updateOrderStatus = async(id, payload) => {
 
             updated = {
                 ...order,
-                status: payload ?.status || order.status,
-                statusLabel: normalizeStatusLabel(payload ?.status || order.status, order.statusLabel),
+                status: normalizeStatusValue(payload ?.status || order.status),
+                statusLabel: normalizeStatusLabel(normalizeStatusValue(payload ?.status || order.status), order.statusLabel),
             };
 
             return updated;

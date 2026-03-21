@@ -4,12 +4,14 @@ import { FiArrowLeft, FiTrash2, FiShoppingCart } from 'react-icons/fi';
 import ProductCard from '../components/ProductCard';
 import { getFavorites, clearAllFavorites, removeFromFavorites } from '../services/favoritesService';
 import { getProducts } from '../services/productsService';
+import { addToCart } from '../services/cartService';
 import './FavoritesPage.css';
 
 export default function FavoritesPage() {
     const [favoriteProducts, setFavoriteProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
+    const [cartMessage, setCartMessage] = useState('');
 
     useEffect(() => {
         const loadFavorites = async () => {
@@ -56,6 +58,11 @@ export default function FavoritesPage() {
             clearAllFavorites();
             setFavoriteProducts([]);
         }
+    };
+
+    const handleAddAllToCart = () => {
+        favoriteProducts.forEach((product) => addToCart(product, 1));
+        setCartMessage(`Đã thêm ${favoriteProducts.length} sản phẩm vào giỏ hàng.`);
     };
 
     return (
@@ -112,7 +119,7 @@ export default function FavoritesPage() {
                         <div className="favorites__actions">
                             <button
                                 className="btn btn-accent btn-lg"
-                                onClick={() => alert('Tính năng thêm giỏ hàng sẽ ra mắt sớm')}
+                                onClick={handleAddAllToCart}
                             >
                                 <FiShoppingCart size={18} /> Thêm tất cả vào giỏ
                             </button>
@@ -123,6 +130,10 @@ export default function FavoritesPage() {
                                 <FiTrash2 size={18} /> Xóa tất cả
                             </button>
                         </div>
+
+                        {cartMessage && (
+                            <p style={{ color: 'var(--success)', marginBottom: '14px', fontWeight: 600 }}>{cartMessage}</p>
+                        )}
 
                         {/* Products Grid */}
                         <div className="favorites__products">

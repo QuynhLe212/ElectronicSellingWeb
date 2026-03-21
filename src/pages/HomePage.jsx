@@ -64,7 +64,7 @@ export default function HomePage() {
                             <Link to="/products" className="btn btn-accent btn-lg">
                                 Mua sắm ngay <FiArrowRight />
                             </Link>
-                            <Link to="/products?category=smartphones" className="btn btn-outline btn-lg hero__btn-outline">
+                            <Link to="/products?deal=sale" className="btn btn-outline btn-lg hero__btn-outline">
                                 Xem khuyến mãi
                             </Link>
                         </div>

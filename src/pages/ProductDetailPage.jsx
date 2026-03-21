@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { FiShoppingCart, FiHeart, FiShare2, FiTruck, FiRefreshCw, FiShield, FiCheck, FiMinus, FiPlus, FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import StarRating from '../components/StarRating';
 import ProductCard from '../components/ProductCard';
 import { addProductReview, getProductById, getTopRatedProducts } from '../services/productsService';
+import { addToCart } from '../services/cartService';
 import './ProductDetailPage.css';
 
 const PRODUCT_FALLBACK_IMAGE = 'https://picsum.photos/seed/product-fallback/1200/1200';
@@ -45,6 +46,7 @@ function withFallbackImage(event) {
 
 export default function ProductDetailPage() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [product, setProduct] = useState(EMPTY_PRODUCT);
     const [relatedPool, setRelatedPool] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +54,8 @@ export default function ProductDetailPage() {
     const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
     const [reviewMessage, setReviewMessage] = useState({ type: '', text: '' });
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+    const [cartNotice, setCartNotice] = useState('');
+    const [stockWarning, setStockWarning] = useState('');
 
     const productReviews = useMemo(() => {
         const apiReviews = product?.reviews;
@@ -149,6 +153,15 @@ export default function ProductDetailPage() {
     }, [product, relatedProducts, relatedPool]);
 
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
+    const availableStock = useMemo(() => {
+        const parsed = Number(product?.stock);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+            return null;
+        }
+
+        return Math.floor(parsed);
+    }, [product?.stock]);
+    const isOutOfStock = availableStock === 0;
 
     const handleZoom = (e) => {
         const rect = e.currentTarget.getBoundingClientRect();
@@ -198,6 +211,58 @@ export default function ProductDetailPage() {
         } finally {
             setIsSubmittingReview(false);
         }
+    };
+
+    useEffect(() => {
+        setQuantity(1);
+        setStockWarning('');
+        setCartNotice('');
+    }, [product?.id]);
+
+    const handleDecreaseQuantity = () => {
+        setStockWarning('');
+        setQuantity((prev) => Math.max(1, prev - 1));
+    };
+
+    const handleIncreaseQuantity = () => {
+        if (availableStock !== null && quantity >= availableStock) {
+            setStockWarning(`Chỉ còn ${availableStock} sản phẩm trong kho.`);
+            return;
+        }
+
+        setStockWarning('');
+        setQuantity((prev) => prev + 1);
+    };
+
+    const handleAddToCart = () => {
+        if (isOutOfStock) {
+            setCartNotice('Sản phẩm hiện đang hết hàng.');
+            return;
+        }
+
+        if (availableStock !== null && quantity > availableStock) {
+            setStockWarning(`Số lượng vượt quá tồn kho. Chỉ còn ${availableStock} sản phẩm.`);
+            return;
+        }
+
+        addToCart(product, quantity);
+        setCartNotice(`Đã thêm ${quantity} sản phẩm vào giỏ hàng.`);
+        setStockWarning('');
+    };
+
+    const handleBuyNow = () => {
+        if (isOutOfStock) {
+            setCartNotice('Sản phẩm hiện đang hết hàng.');
+            return;
+        }
+
+        if (availableStock !== null && quantity > availableStock) {
+            setStockWarning(`Số lượng vượt quá tồn kho. Chỉ còn ${availableStock} sản phẩm.`);
+            return;
+        }
+
+        addToCart(product, quantity);
+        navigate('/checkout');
     };
 
     return (
@@ -326,21 +391,34 @@ export default function ProductDetailPage() {
                         <div className="pdp__option">
                             <label className="pdp__option-label">Số lượng:</label>
                             <div className="pdp__quantity">
-                                <button onClick={() => setQuantity(Math.max(1, quantity - 1))}><FiMinus /></button>
+                                <button onClick={handleDecreaseQuantity} disabled={quantity <= 1}><FiMinus /></button>
                                 <span>{quantity}</span>
-                                <button onClick={() => setQuantity(quantity + 1)}><FiPlus /></button>
+                                <button onClick={handleIncreaseQuantity} disabled={isOutOfStock || (availableStock !== null && quantity >= availableStock)}><FiPlus /></button>
                             </div>
+                            {availableStock !== null && !isOutOfStock && (
+                                <p className="pdp__stock-note">Còn {availableStock} sản phẩm trong kho</p>
+                            )}
+                            {isOutOfStock && (
+                                <p className="pdp__stock-note pdp__stock-note--danger">Sản phẩm đã hết hàng</p>
+                            )}
+                            {stockWarning && (
+                                <p className="pdp__stock-note pdp__stock-note--danger">{stockWarning}</p>
+                            )}
                         </div>
 
                         {/* Nút CTA */}
                         <div className="pdp__cta-row">
-                            <button className="btn btn-accent btn-lg pdp__add-to-cart">
+                            <button className="btn btn-accent btn-lg pdp__add-to-cart" onClick={handleAddToCart}>
                                 <FiShoppingCart size={20} /> Thêm vào giỏ hàng
                             </button>
-                            <button className="btn btn-primary btn-lg pdp__buy-now">
+                            <button className="btn btn-primary btn-lg pdp__buy-now" onClick={handleBuyNow}>
                                 Mua ngay
                             </button>
                         </div>
+
+                        {cartNotice && (
+                            <p style={{ marginTop: '10px', color: 'var(--success)', fontWeight: 600 }}>{cartNotice}</p>
+                        )}
 
                         <div className="pdp__secondary-actions">
                             <button className="pdp__secondary-btn"><FiHeart size={16} /> Thêm vào yêu thích</button>

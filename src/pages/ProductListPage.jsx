@@ -25,9 +25,12 @@ const priceRanges = [
 ];
 
 export default function ProductListPage() {
+    const PAGE_SIZE = 12;
     const [searchParams] = useSearchParams();
     const categoryParam = searchParams.get('category') || '';
     const searchQuery = searchParams.get('search') || '';
+    const dealParam = searchParams.get('deal') || '';
+    const isDealsOnly = String(dealParam).toLowerCase() === 'sale';
 
     const [viewMode, setViewMode] = useState('grid');
     const [sortBy, setSortBy] = useState('relevance');
@@ -38,7 +41,6 @@ export default function ProductListPage() {
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [productList, setProductList] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [apiError, setApiError] = useState('');
 
@@ -50,6 +52,10 @@ export default function ProductListPage() {
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [dealParam]);
 
     const toggleCategory = (slug) => {
         setSelectedCategories((prev) =>
@@ -97,19 +103,17 @@ export default function ProductListPage() {
                     maxPrice: selectedRange && Number.isFinite(selectedRange.max) ? selectedRange.max : '',
                     brand: selectedBrands[0] || '',
                     sort: sortMap[sortBy] || '-createdAt',
-                    page: currentPage,
-                    limit: 12,
+                    page: 1,
+                    limit: 500,
                 });
 
                 if (ignore) return;
 
                 setProductList(response.products || []);
-                setTotalPages(response.pages || 1);
             } catch (error) {
                 if (ignore) return;
                 setApiError(error.message || 'Không thể tải danh sách sản phẩm từ máy chủ.');
                 setProductList([]);
-                setTotalPages(1);
             } finally {
                 if (!ignore) {
                     setIsLoading(false);
@@ -122,10 +126,19 @@ export default function ProductListPage() {
         return () => {
             ignore = true;
         };
-    }, [searchQuery, selectedCategories, selectedBrands, selectedPriceRange, sortBy, currentPage]);
+    }, [searchQuery, selectedCategories, selectedBrands, selectedPriceRange, sortBy, isDealsOnly]);
 
     const filteredProducts = useMemo(() => {
         let result = [...productList];
+
+        if (isDealsOnly) {
+            result = result.filter((p) => {
+                const price = Number(p.price || 0);
+                const original = Number(p.originalPrice || 0);
+                const discount = Number(p.discount || 0);
+                return (Number.isFinite(original) && original > price) || discount > 0 || p.badge === 'sale';
+            });
+        }
 
         if (selectedCategories.length > 1) {
             result = result.filter((p) => selectedCategories.includes(p.category));
@@ -142,20 +155,35 @@ export default function ProductListPage() {
         return result;
     }, [productList, selectedCategories, selectedBrands, selectedRating]);
 
+    const displayTotalPages = useMemo(() => {
+        return Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+    }, [filteredProducts.length]);
+
+    const visibleProducts = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return filteredProducts.slice(start, start + PAGE_SIZE);
+    }, [currentPage, filteredProducts]);
+
+    useEffect(() => {
+        if (currentPage > displayTotalPages) {
+            setCurrentPage(displayTotalPages);
+        }
+    }, [currentPage, displayTotalPages]);
+
     const activeFilterCount = selectedCategories.length + selectedBrands.length + (selectedPriceRange !== null ? 1 : 0) + (selectedRating > 0 ? 1 : 0);
 
     const pageNumbers = useMemo(() => {
         const pages = [];
         const maxVisible = 5;
         const start = Math.max(1, currentPage - 2);
-        const end = Math.min(totalPages, start + maxVisible - 1);
+        const end = Math.min(displayTotalPages, start + maxVisible - 1);
 
         for (let p = start; p <= end; p += 1) {
             pages.push(p);
         }
 
         return pages;
-    }, [currentPage, totalPages]);
+    }, [currentPage, displayTotalPages]);
 
     const renderFilters = () => (
         <div className="plp__filters-content">
@@ -264,7 +292,7 @@ export default function ProductListPage() {
                 <nav className="plp__breadcrumb">
                     <Link to="/">Trang chủ</Link>
                     <span>/</span>
-                    <span>Sản phẩm</span>
+                    <span>{isDealsOnly ? 'Khuyến mãi' : 'Sản phẩm'}</span>
                     {categoryParam && (
                         <>
                             <span>/</span>
@@ -343,9 +371,9 @@ export default function ProductListPage() {
                             </div>
                         )}
 
-                        {!isLoading && !apiError && filteredProducts.length > 0 ? (
+                        {!isLoading && !apiError && visibleProducts.length > 0 ? (
                             <div className={`plp__products ${viewMode === 'list' ? 'plp__products--list' : ''}`}>
-                                {filteredProducts.map((product) => (
+                                {visibleProducts.map((product) => (
                                     <ProductCard key={product.id} product={product} listView={viewMode === 'list'} />
                                 ))}
                             </div>
@@ -359,7 +387,7 @@ export default function ProductListPage() {
                         ) : null}
 
                         {/* Phân trang */}
-                        {!isLoading && !apiError && filteredProducts.length > 0 && (
+                        {!isLoading && !apiError && visibleProducts.length > 0 && (
                             <div className="plp__pagination">
                                 <button
                                     className={`plp__page-btn ${currentPage <= 1 ? 'plp__page-btn--disabled' : ''}`}
@@ -380,9 +408,9 @@ export default function ProductListPage() {
                                 ))}
 
                                 <button
-                                    className={`plp__page-btn ${currentPage >= totalPages ? 'plp__page-btn--disabled' : ''}`}
-                                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage >= totalPages}
+                                    className={`plp__page-btn ${currentPage >= displayTotalPages ? 'plp__page-btn--disabled' : ''}`}
+                                    onClick={() => setCurrentPage((p) => Math.min(displayTotalPages, p + 1))}
+                                    disabled={currentPage >= displayTotalPages}
                                 >
                                     Sau &gt;
                                 </button>
