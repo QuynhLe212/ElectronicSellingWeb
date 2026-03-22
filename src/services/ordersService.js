@@ -7,11 +7,11 @@ const isNetworkError = (error) =>
     String(error ?.message || "").toLowerCase().includes("khong the ket noi den may chu");
 
 const statusLabelMap = {
-    pending: "Ch? x? lý",
-    processing: "Ðang x? lý",
-    shipping: "Ðang giao",
-    delivered: "Ðã giao",
-    cancelled: "Ðã h?y",
+    pending: "Ch\u1edd x\u1eed l\u00fd",
+    processing: "\u0110ang x\u1eed l\u00fd",
+    shipping: "\u0110ang giao",
+    delivered: "\u0110\u00e3 giao",
+    cancelled: "\u0110\u00e3 h\u1ee7y",
 };
 
 const apiStatusMap = {
@@ -24,25 +24,62 @@ const apiStatusMap = {
 
 const normalizeStatusValue = (status) => {
     const normalized = String(status || "").trim().toLowerCase();
-    if (["pending"].includes(normalized)) return "pending";
-    if (["processing"].includes(normalized)) return "processing";
-    if (["shipping", "shipped"].includes(normalized)) return "shipping";
-    if (["delivered"].includes(normalized)) return "delivered";
-    if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
+    if (["pending", "cho xu ly", "cho xu li"].includes(normalized)) return "pending";
+    if (["processing", "dang xu ly", "dang xu li"].includes(normalized)) return "processing";
+    if (["shipping", "shipped", "dang giao"].includes(normalized)) return "shipping";
+    if (["delivered", "da giao"].includes(normalized)) return "delivered";
+    if (["cancelled", "canceled", "da huy"].includes(normalized)) return "cancelled";
     return "pending";
+};
+
+const isCorruptedVietnameseText = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return false;
+    return /\uFFFD/.test(raw) || /Ãƒ|Ã„|Ã¡Â»|Ã¡Âº|Ã¡Â¸|Ã‚/.test(raw);
 };
 
 const normalizeStatusLabel = (status, statusLabel) => {
     if (statusLabel) {
-        const normalized = String(statusLabel).trim().toLowerCase();
-        if (normalized === "cho xu ly") return "Ch? x? lý";
-        if (normalized === "dang giao") return "Ðang giao";
-        if (normalized === "da giao") return "Ðã giao";
-        if (normalized === "da huy") return "Ðã h?y";
+        const raw = String(statusLabel).trim();
+        const lowerRaw = raw.toLowerCase();
+        const normalized = raw
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase();
+
+        // Treat common mojibake patterns as corrupted text and recover from status value.
+        if (isCorruptedVietnameseText(raw)) {
+            return statusLabelMap[status] || statusLabelMap.pending;
+        }
+
+        if (["cho xu ly", "cho xu li", "pending"].includes(normalized)) {
+            return statusLabelMap.pending;
+        }
+        if (["dang xu ly", "dang xu li", "processing"].includes(normalized)) {
+            return statusLabelMap.processing;
+        }
+        if (["dang giao", "shipping", "shipped"].includes(normalized)) {
+            return statusLabelMap.shipping;
+        }
+        if (["da giao", "delivered"].includes(normalized)) {
+            return statusLabelMap.delivered;
+        }
+        if (["da huy", "da huy", "cancelled", "canceled"].includes(normalized)) {
+            return statusLabelMap.cancelled;
+        }
+
+        if (Object.values(statusLabelMap).includes(raw)) {
+            return raw;
+        }
+
+        if (apiStatusMap[status] && lowerRaw === apiStatusMap[status].toLowerCase()) {
+            return statusLabelMap[status];
+        }
+
         return statusLabel;
     }
 
-    return statusLabelMap[status] || "Ch? x? lý";
+    return statusLabelMap[status] || statusLabelMap.pending;
 };
 
 const toNumber = (value, fallback = 0) => {

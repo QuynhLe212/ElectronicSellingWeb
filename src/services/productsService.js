@@ -1,4 +1,4 @@
-import { apiClient, API_BASE_URL } from "./apiClient";
+﻿import { apiClient, API_BASE_URL } from "./apiClient";
 import { products as mockProducts } from "../data/data";
 
 const LOCAL_PRODUCTS_KEY = "local_products_data";
@@ -227,19 +227,19 @@ const normalizeProduct = (product) => {
     if (!product) return null;
 
     const id = product.id || product._id;
-    const normalizedImages = Array.isArray(product.images)
-        ? product.images.map(extractImageUrl).filter(Boolean)
-        : [];
+    const normalizedImages = Array.isArray(product.images) ?
+        product.images.map(extractImageUrl).filter(Boolean) :
+        [];
     const firstImage =
         extractImageUrl(product.image) ||
         extractImageUrl(product.thumbnail) ||
         normalizedImages[0] ||
         DEFAULT_PRODUCT_IMAGE;
-    const shortFeatures = Array.isArray(product.shortFeatures)
-        ? product.shortFeatures
-        : Array.isArray(product.features)
-            ? product.features
-            : [];
+    const shortFeatures = Array.isArray(product.shortFeatures) ?
+        product.shortFeatures :
+        Array.isArray(product.features) ?
+        product.features :
+        [];
     const specs = toPlainObject(product.specs || product.specifications);
     const colors = Array.isArray(product.colors) ? product.colors : [];
     const rating = toNumber(product.rating, 0);
@@ -251,9 +251,9 @@ const normalizeProduct = (product) => {
         (Array.isArray(product.reviews) ? product.reviews.length : 0);
     const discount =
         toNumber(product.discount, NaN) ||
-        (Number.isFinite(originalPrice) && originalPrice > price
-            ? Math.round(((originalPrice - price) / originalPrice) * 100)
-            : 0);
+        (Number.isFinite(originalPrice) && originalPrice > price ?
+            Math.round(((originalPrice - price) / originalPrice) * 100) :
+            0);
     const badge = product.badge || (product.isFeatured ? "new" : null);
 
     return {
@@ -291,25 +291,29 @@ export const getProducts = async(params = {}) => {
             ...params,
             category: toApiCategory(params.category),
         };
-        const response = await apiClient.get(`/products${toQueryString(requestParams)}`);
+
+        const hasSearchQuery = String(requestParams.search || "").trim().length > 0;
+        const response = await apiClient.get(
+            hasSearchQuery ?
+            `/products/advanced-search${toQueryString(requestParams)}` :
+            `/products${toQueryString(requestParams)}`
+        );
 
         return {
             products: extractProductList(response),
             page: response ?.page || response ?.pagination ?.page || response ?.data ?.page || 1,
-            pages:
-                response ?.pages ||
+            pages: response ?.pages ||
                 response ?.pagination ?.totalPages ||
                 response ?.data ?.pages ||
                 1,
-            total:
-                response ?.total ||
+            total: response ?.total ||
                 response ?.count ||
                 response ?.pagination ?.totalProducts ||
                 response ?.data ?.total ||
                 0,
         };
     } catch (error) {
-            throw error;
+        throw error;
     }
 };
 
