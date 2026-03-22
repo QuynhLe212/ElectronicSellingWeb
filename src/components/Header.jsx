@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FiSearch, FiUser, FiShoppingCart, FiHeart, FiMenu, FiX, FiChevronDown, FiPhone, FiMail, FiTruck } from 'react-icons/fi';
 import { categories } from '../data/data';
 import { getFavorites } from '../services/favoritesService';
+import { getCartCount, subscribeCartChanges } from '../services/cartService';
 import './Header.css';
 
 const megaMenuData = {
@@ -38,6 +39,7 @@ export default function Header() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [favoritesCount, setFavoritesCount] = useState(0);
+    const [cartCount, setCartCount] = useState(0);
     const megaRef = useRef(null);
     const navigate = useNavigate();
 
@@ -57,6 +59,15 @@ export default function Header() {
         // Listen for storage changes (when favorites are updated in other tabs/windows)
         window.addEventListener('storage', updateFavoritesCount);
         return () => window.removeEventListener('storage', updateFavoritesCount);
+    }, []);
+
+    useEffect(() => {
+        setCartCount(getCartCount());
+        const unsubscribe = subscribeCartChanges(() => {
+            setCartCount(getCartCount());
+        });
+
+        return unsubscribe;
     }, []);
 
     useEffect(() => {
@@ -109,7 +120,7 @@ export default function Header() {
                         </Link>
                         <Link to="/checkout" className="header__icon-btn header__cart-btn">
                             <FiShoppingCart size={22} />
-                            <span className="header__icon-badge">2</span>
+                            <span className="header__icon-badge">{cartCount}</span>
                             <span className="header__cart-text">Giỏ hàng</span>
                         </Link>
                     </div>
@@ -177,7 +188,7 @@ export default function Header() {
                             )}
                         </div>
                     ))}
-                    <Link to="/products" className="header__nav-link header__nav-link--deals" onClick={() => setMobileOpen(false)}>
+                    <Link to="/products?deal=sale" className="header__nav-link header__nav-link--deals" onClick={() => setMobileOpen(false)}>
                         🔥 Khuyến mãi
                     </Link>
                 </div>

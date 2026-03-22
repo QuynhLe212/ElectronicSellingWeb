@@ -7,23 +7,42 @@ const isNetworkError = (error) =>
     String(error ?.message || "").toLowerCase().includes("khong the ket noi den may chu");
 
 const statusLabelMap = {
-    pending: "Chá» xá»­ lÃ½",
-    shipping: "Äang giao",
-    delivered: "ÄÃ£ giao",
-    cancelled: "ÄÃ£ há»§y",
+    pending: "Ch? x? lı",
+    processing: "Ğang x? lı",
+    shipping: "Ğang giao",
+    delivered: "Ğã giao",
+    cancelled: "Ğã h?y",
+};
+
+const apiStatusMap = {
+    pending: "Pending",
+    processing: "Processing",
+    shipping: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+};
+
+const normalizeStatusValue = (status) => {
+    const normalized = String(status || "").trim().toLowerCase();
+    if (["pending"].includes(normalized)) return "pending";
+    if (["processing"].includes(normalized)) return "processing";
+    if (["shipping", "shipped"].includes(normalized)) return "shipping";
+    if (["delivered"].includes(normalized)) return "delivered";
+    if (["cancelled", "canceled"].includes(normalized)) return "cancelled";
+    return "pending";
 };
 
 const normalizeStatusLabel = (status, statusLabel) => {
     if (statusLabel) {
         const normalized = String(statusLabel).trim().toLowerCase();
-        if (normalized === "cho xu ly") return "Chá» xá»­ lÃ½";
-        if (normalized === "dang giao") return "Äang giao";
-        if (normalized === "da giao") return "ÄÃ£ giao";
-        if (normalized === "da huy") return "ÄÃ£ há»§y";
+        if (normalized === "cho xu ly") return "Ch? x? lı";
+        if (normalized === "dang giao") return "Ğang giao";
+        if (normalized === "da giao") return "Ğã giao";
+        if (normalized === "da huy") return "Ğã h?y";
         return statusLabel;
     }
 
-    return statusLabelMap[status] || "Chá» xá»­ lÃ½";
+    return statusLabelMap[status] || "Ch? x? lı";
 };
 
 const toNumber = (value, fallback = 0) => {
@@ -92,11 +111,12 @@ const toOrder = (order) => ({
     ...order,
     id: order ?.id || order ?._id,
     _id: order ?._id || order ?.id,
+    status: normalizeStatusValue(order ?.status),
     orderItems: normalizeOrderItems(order),
     items: normalizeOrderItems(order),
     total: toNumber(order ?.total || order ?.totalPrice, 0),
     totalPrice: toNumber(order ?.totalPrice || order ?.total, 0),
-    statusLabel: normalizeStatusLabel(order ?.status, order ?.statusLabel),
+    statusLabel: normalizeStatusLabel(normalizeStatusValue(order ?.status), order ?.statusLabel),
 });
 
 const extractOrders = (payload) => {
@@ -105,16 +125,73 @@ const extractOrders = (payload) => {
     return raw.map(toOrder);
 };
 
-export const getOrdersAdmin = async() => {
+const extractOrdersMeta = (payload, orders) => ({
+    pagination: {
+        page: payload ?.pagination ?.page || payload ?.page || 1,
+        limit: payload ?.pagination ?.limit || payload ?.limit || (orders.length || 1),
+        totalPages: payload ?.pagination ?.totalPages || payload ?.pages || 1,
+        totalOrders: payload ?.pagination ?.totalOrders ||
+            payload ?.total ||
+            payload ?.count ||
+            orders.length,
+    },
+    statistics: {
+        totalRevenue: toNumber(payload ?.statistics ?.totalRevenue, 0),
+        averageOrderValue: toNumber(payload ?.statistics ?.averageOrderValue, 0),
+    },
+});
+
+export const getOrdersAdmin = async(params = {}, options = {}) => {
+    const { withMeta = false } = options;
+
     try {
-        const response = await apiClient.get("/orders", { auth: true });
-        return extractOrders(response);
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === "") return;
+            query.set(key, String(value));
+        });
+
+        const suffix = query.toString() ? `?${query.toString()}` : "";
+        const response = await apiClient.get(`/orders${suffix}`, { auth: true });
+        const orders = extractOrders(response);
+
+        if (!withMeta) {
+            return orders;
+        }
+
+        return {
+            orders,
+            ...extractOrdersMeta(response, orders),
+        };
     } catch (error) {
         if (!isNetworkError(error)) {
             throw error;
         }
 
-        return readLocalOrders().map(toOrder);
+        const orders = readLocalOrders().map(toOrder);
+
+        if (!withMeta) {
+            return orders;
+        }
+
+        const totalRevenue = orders.reduce(
+            (sum, order) => sum + toNumber(order.total || order.totalPrice, 0),
+            0
+        );
+
+        return {
+            orders,
+            pagination: {
+                page: 1,
+                limit: orders.length || 1,
+                totalPages: 1,
+                totalOrders: orders.length,
+            },
+            statistics: {
+                totalRevenue,
+                averageOrderValue: orders.length > 0 ? totalRevenue / orders.length : 0,
+            },
+        };
     }
 };
 
@@ -164,7 +241,7 @@ export const createOrder = async(payload) => {
 
 export const getMyOrders = async() => {
     try {
-        const response = await apiClient.get("/orders/myorders", { auth: true });
+        const response = await apiClient.get("/orders/my-orders", { auth: true });
         return extractOrders(response);
     } catch (error) {
         if (!isNetworkError(error)) {
@@ -192,7 +269,14 @@ export const getOrderById = async(id) => {
         const order = response ?.order || response ?.data ?.order || response ?.data || response;
         return toOrder(order);
     } catch (error) {
-        if (!isNetworkError(error)) {
+        const message = String(error ?.message || "").toLowerCase();
+        const shouldFallbackToLocal =
+            isNetworkError(error) ||
+            message.includes("validation failed") ||
+            message.includes("invalid id") ||
+            message.includes("invalid id format");
+
+        if (!shouldFallbackToLocal) {
             throw error;
         }
 
@@ -203,7 +287,13 @@ export const getOrderById = async(id) => {
 
 export const updateOrderStatus = async(id, payload) => {
     try {
-        const response = await apiClient.put(`/orders/${id}`, payload, { auth: true });
+        const status = normalizeStatusValue(payload ?.status);
+        const apiStatus = apiStatusMap[status] || "Pending";
+
+        const response = await apiClient.put(`/orders/${id}/status`, {
+            ...payload,
+            status: apiStatus,
+        }, { auth: true });
         const order = response ?.order || response ?.data ?.order || response ?.data || response;
         return toOrder(order);
     } catch (error) {
@@ -221,8 +311,8 @@ export const updateOrderStatus = async(id, payload) => {
 
             updated = {
                 ...order,
-                status: payload ?.status || order.status,
-                statusLabel: normalizeStatusLabel(payload ?.status || order.status, order.statusLabel),
+                status: normalizeStatusValue(payload ?.status || order.status),
+                statusLabel: normalizeStatusLabel(normalizeStatusValue(payload ?.status || order.status), order.statusLabel),
             };
 
             return updated;

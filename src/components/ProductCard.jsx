@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { FiShoppingCart, FiHeart } from 'react-icons/fi';
 import StarRating from './StarRating';
 import { isFavorite, toggleFavorite } from '../services/favoritesService';
+import { addToCart } from '../services/cartService';
 import './ProductCard.css';
 
 const PRODUCT_FALLBACK_IMAGE = 'https://picsum.photos/seed/product-fallback/600/600';
@@ -30,6 +31,11 @@ export default function ProductCard({ product, listView = false }) {
         setIsFav((prev) => !prev);
     };
 
+    const handleAddToCart = (e) => {
+        e.preventDefault();
+        addToCart(product, 1);
+    };
+
     const hasDiscount = product.originalPrice && product.originalPrice > product.price;
 
     return (
@@ -55,7 +61,7 @@ export default function ProductCard({ product, listView = false }) {
                     >
                         <FiHeart size={18} fill={isFav ? 'currentColor' : 'none'} />
                     </button>
-                    <button className="product-card__action-btn product-card__action-btn--cart" title="Thêm vào giỏ hàng" onClick={(e) => e.preventDefault()}>
+                    <button className="product-card__action-btn product-card__action-btn--cart" title="Thêm vào giỏ hàng" onClick={handleAddToCart}>
                         <FiShoppingCart size={18} />
                     </button>
                 </div>
@@ -77,7 +83,7 @@ export default function ProductCard({ product, listView = false }) {
                     <p className="product-card__description">{product.description}</p>
                 )}
                 {listView && (
-                    <button className="btn btn-accent btn-sm product-card__add-btn">
+                    <button className="btn btn-accent btn-sm product-card__add-btn" onClick={handleAddToCart}>
                         <FiShoppingCart size={14} /> Thêm vào giỏ
                     </button>
                 )}

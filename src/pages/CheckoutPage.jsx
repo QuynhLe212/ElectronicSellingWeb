@@ -1,15 +1,86 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiLock, FiCheck, FiChevronLeft, FiShield, FiTruck, FiCreditCard, FiTrash2, FiMinus, FiPlus } from 'react-icons/fi';
 import { createOrder } from '../services/ordersService';
+import { getMe } from '../services/authService';
+import { clearCart, getCartItems, removeFromCart, subscribeCartChanges, updateCartItemQuantity } from '../services/cartService';
 import './CheckoutPage.css';
 
 function formatVND(price) {
     return price.toLocaleString('vi-VN') + '₫';
 }
 
-// Giỏ hàng khởi tạo rỗng; chỉ hiển thị khi người dùng thêm sản phẩm.
-const initialCart = [];
+const INITIAL_FORM_DATA = {
+    email: '',
+    firstName: '',
+    lastName: '',
+    address: '',
+    city: '',
+    district: '',
+    ward: '',
+    phone: '',
+    shippingMethod: 'standard',
+    paymentMethod: 'Credit Card',
+    cardNumber: '',
+    cardName: '',
+    expiry: '',
+    cvv: '',
+    promoCode: '',
+};
+
+const normalizePhone = (phone) => String(phone || '').replace(/\D/g, '');
+
+const splitDisplayName = (fullName = '') => {
+    const safeName = String(fullName || '').trim();
+    if (!safeName) return { firstName: '', lastName: '' };
+
+    const parts = safeName.split(/\s+/);
+    if (parts.length === 1) {
+        return { firstName: parts[0], lastName: '' };
+    }
+
+    return {
+        firstName: parts[parts.length - 1],
+        lastName: parts.slice(0, -1).join(' '),
+    };
+};
+
+const fillIfEmpty = (currentValue, nextValue) => {
+    if (String(currentValue || '').trim()) return currentValue;
+    return String(nextValue || '').trim();
+};
+
+const mergeProfileIntoForm = (prevForm, user) => {
+    if (!user) return prevForm;
+
+    const nameParts = splitDisplayName(user?.name);
+    const profileAddress = user?.address || {};
+
+    return {
+        ...prevForm,
+        email: fillIfEmpty(prevForm.email, user?.email),
+        phone: fillIfEmpty(prevForm.phone, user?.phone),
+        firstName: fillIfEmpty(prevForm.firstName, nameParts.firstName),
+        lastName: fillIfEmpty(prevForm.lastName, nameParts.lastName),
+        address: fillIfEmpty(prevForm.address, profileAddress?.street),
+        city: fillIfEmpty(prevForm.city, profileAddress?.city),
+        district: fillIfEmpty(prevForm.district, profileAddress?.district),
+        ward: fillIfEmpty(prevForm.ward, profileAddress?.ward),
+    };
+};
+
+const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || '').trim());
+
+const isValidExpiry = (expiry) => {
+    const text = String(expiry || '').trim();
+    if (!/^(0[1-9]|1[0-2])\/(\d{2})$/.test(text)) return false;
+
+    const [month, year2] = text.split('/').map(Number);
+    const year = 2000 + year2;
+    const now = new Date();
+    const expiryDate = new Date(year, month, 0, 23, 59, 59);
+    return expiryDate >= now;
+};
 
 const steps = [
     { id: 1, label: 'Vận chuyển', icon: <FiTruck /> },
@@ -21,51 +92,129 @@ export default function CheckoutPage() {
     const navigate = useNavigate();
     const isLoggedIn = Boolean(localStorage.getItem('user_token'));
     const [currentStep, setCurrentStep] = useState(1);
-    const [cart, setCart] = useState(initialCart);
+    const [cart, setCart] = useState(() => getCartItems());
     const [isPlacingOrder, setIsPlacingOrder] = useState(false);
     const [checkoutError, setCheckoutError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState({});
     const [createdOrder, setCreatedOrder] = useState(null);
-    const [formData, setFormData] = useState({
-        email: '',
-        firstName: '',
-        lastName: '',
-        address: '',
-        city: '',
-        district: '',
-        ward: '',
-        phone: '',
-        shippingMethod: 'standard',
-        cardNumber: '',
-        cardName: '',
-        expiry: '',
-        cvv: '',
-        promoCode: '',
-    });
+    const [formData, setFormData] = useState(() => ({ ...INITIAL_FORM_DATA }));
+
+    useEffect(() => {
+        const unsubscribe = subscribeCartChanges((items) => setCart(items));
+        setCart(getCartItems());
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        if (!isLoggedIn) return;
+
+        let isMounted = true;
+
+        try {
+            const cachedUser = JSON.parse(localStorage.getItem('user_data') || '{}');
+            if (cachedUser && isMounted) {
+                setFormData((prev) => mergeProfileIntoForm(prev, cachedUser));
+            }
+        } catch {
+            // Ignore invalid local profile cache.
+        }
+
+        const loadProfile = async () => {
+            try {
+                const data = await getMe();
+                const user = data?.user;
+                if (!user || !isMounted) return;
+
+                setFormData((prev) => mergeProfileIntoForm(prev, user));
+            } catch {
+                // Keep current form values when profile fetch fails.
+            }
+        };
+
+        loadProfile();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isLoggedIn]);
 
     const updateField = (field, value) => {
+        if (fieldErrors[field]) {
+            setFieldErrors((prev) => ({ ...prev, [field]: '' }));
+        }
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const updateQuantity = (idx, delta) => {
-        setCart((prev) => {
-            const newCart = [...prev];
-            newCart[idx].quantity = Math.max(1, newCart[idx].quantity + delta);
-            return newCart;
-        });
+    const updateQuantity = (productId, delta, currentQty) => {
+        updateCartItemQuantity(productId, Math.max(1, currentQty + delta));
     };
 
-    const removeItem = (idx) => {
-        setCart((prev) => prev.filter((_, i) => i !== idx));
+    const removeItem = (productId) => {
+        removeFromCart(productId);
     };
 
-    const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const subtotal = useMemo(
+        () => cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+        [cart],
+    );
     const shipping = formData.shippingMethod === 'express' ? 50000 : (subtotal >= 2000000 ? 0 : 30000);
     const tax = 0; // VAT đã bao gồm trong giá tại Việt Nam
     const total = subtotal + shipping + tax;
 
+    const validateShippingStep = () => {
+        const errors = {};
+
+        if (!isValidEmail(formData.email)) errors.email = 'Email không hợp lệ.';
+        if (!String(formData.lastName || '').trim()) errors.lastName = 'Vui lòng nhập họ.';
+        if (!String(formData.firstName || '').trim()) errors.firstName = 'Vui lòng nhập tên.';
+        if (!String(formData.address || '').trim()) errors.address = 'Vui lòng nhập địa chỉ.';
+        if (!String(formData.city || '').trim()) errors.city = 'Vui lòng nhập tỉnh/thành phố.';
+        if (!String(formData.district || '').trim()) errors.district = 'Vui lòng nhập quận/huyện.';
+        if (!String(formData.ward || '').trim()) errors.ward = 'Vui lòng nhập phường/xã.';
+
+        const phoneDigits = normalizePhone(formData.phone);
+        if (!/^[0-9]{10,11}$/.test(phoneDigits)) {
+            errors.phone = 'Số điện thoại phải gồm 10-11 chữ số.';
+        }
+
+        setFieldErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    const validatePaymentStep = () => {
+        const errors = {};
+
+        if (formData.paymentMethod === 'Credit Card') {
+            const cardNumber = String(formData.cardNumber || '').replace(/\s/g, '');
+            if (!/^\d{13,19}$/.test(cardNumber)) {
+                errors.cardNumber = 'Số thẻ không hợp lệ.';
+            }
+
+            if (!String(formData.cardName || '').trim()) {
+                errors.cardName = 'Vui lòng nhập tên chủ thẻ.';
+            }
+
+            if (!isValidExpiry(formData.expiry)) {
+                errors.expiry = 'Ngày hết hạn không hợp lệ hoặc đã hết hạn.';
+            }
+
+            if (!/^\d{3,4}$/.test(String(formData.cvv || '').trim())) {
+                errors.cvv = 'CVV phải gồm 3-4 chữ số.';
+            }
+        }
+
+        setFieldErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const nextStep = () => {
         if (currentStep === 1 && cart.length === 0) {
             setCheckoutError('Giỏ hàng đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.');
+            return;
+        }
+
+        if (currentStep === 1 && !validateShippingStep()) {
+            setCheckoutError('Vui lòng kiểm tra lại thông tin giao hàng.');
             return;
         }
 
@@ -87,9 +236,23 @@ export default function CheckoutPage() {
             return;
         }
 
+        if (!validateShippingStep()) {
+            setCurrentStep(1);
+            setCheckoutError('Thông tin giao hàng chưa hợp lệ.');
+            return;
+        }
+
+        if (!validatePaymentStep()) {
+            setCheckoutError('Thông tin thanh toán chưa hợp lệ.');
+            return;
+        }
+
         try {
             setIsPlacingOrder(true);
             setCheckoutError('');
+
+            const phoneDigits = normalizePhone(formData.phone);
+            const fullName = `${formData.lastName} ${formData.firstName}`.trim();
 
             const payload = {
                 orderItems: cart.map((item) => ({
@@ -106,10 +269,10 @@ export default function CheckoutPage() {
                     ward: formData.ward,
                     district: formData.district,
                     city: formData.city,
-                    phone: formData.phone,
-                    fullName: `${formData.lastName} ${formData.firstName}`.trim(),
+                    phone: phoneDigits,
+                    fullName,
                 },
-                paymentMethod: 'card',
+                paymentMethod: formData.paymentMethod,
                 shippingPrice: shipping,
                 taxPrice: tax,
                 totalPrice: total,
@@ -118,7 +281,8 @@ export default function CheckoutPage() {
 
             const newOrder = await createOrder(payload);
             setCreatedOrder(newOrder);
-            nextStep();
+            clearCart();
+            setCurrentStep(3);
         } catch (error) {
             setCheckoutError(error.message || 'Không thể tạo đơn hàng.');
         } finally {
@@ -156,8 +320,8 @@ export default function CheckoutPage() {
                         {/* Thông báo khách vãng lai */}
                         {currentStep < 3 && !isLoggedIn && (
                             <div className="checkout__guest-notice">
-                                <span>Bạn đang mua hàng với tư cách khách.</span>
-                                <Link to="/login">Đã có tài khoản? Đăng nhập</Link>
+                                <span>Vui lòng đăng nhập để hoàn tất đặt hàng và theo dõi trạng thái đơn.</span>
+                                <Link to="/login">Đăng nhập ngay</Link>
                             </div>
                         )}
 
@@ -175,6 +339,7 @@ export default function CheckoutPage() {
                                         onChange={(e) => updateField('email', e.target.value)}
                                         autoComplete="email"
                                     />
+                                    {fieldErrors.email && <p className="checkout__field-error">{fieldErrors.email}</p>}
                                 </div>
 
                                 <div className="checkout__field-row">
@@ -187,6 +352,7 @@ export default function CheckoutPage() {
                                             onChange={(e) => updateField('lastName', e.target.value)}
                                             autoComplete="family-name"
                                         />
+                                        {fieldErrors.lastName && <p className="checkout__field-error">{fieldErrors.lastName}</p>}
                                     </div>
                                     <div className="checkout__field">
                                         <label>Tên</label>
@@ -197,6 +363,7 @@ export default function CheckoutPage() {
                                             onChange={(e) => updateField('firstName', e.target.value)}
                                             autoComplete="given-name"
                                         />
+                                        {fieldErrors.firstName && <p className="checkout__field-error">{fieldErrors.firstName}</p>}
                                     </div>
                                 </div>
 
@@ -209,6 +376,7 @@ export default function CheckoutPage() {
                                         onChange={(e) => updateField('address', e.target.value)}
                                         autoComplete="street-address"
                                     />
+                                    {fieldErrors.address && <p className="checkout__field-error">{fieldErrors.address}</p>}
                                 </div>
 
                                 <div className="checkout__field-row checkout__field-row--3">
@@ -221,6 +389,7 @@ export default function CheckoutPage() {
                                             onChange={(e) => updateField('city', e.target.value)}
                                             autoComplete="address-level1"
                                         />
+                                        {fieldErrors.city && <p className="checkout__field-error">{fieldErrors.city}</p>}
                                     </div>
                                     <div className="checkout__field">
                                         <label>Quận / Huyện</label>
@@ -231,6 +400,7 @@ export default function CheckoutPage() {
                                             onChange={(e) => updateField('district', e.target.value)}
                                             autoComplete="address-level2"
                                         />
+                                        {fieldErrors.district && <p className="checkout__field-error">{fieldErrors.district}</p>}
                                     </div>
                                     <div className="checkout__field">
                                         <label>Phường / Xã</label>
@@ -241,6 +411,7 @@ export default function CheckoutPage() {
                                             onChange={(e) => updateField('ward', e.target.value)}
                                             autoComplete="address-level3"
                                         />
+                                        {fieldErrors.ward && <p className="checkout__field-error">{fieldErrors.ward}</p>}
                                     </div>
                                 </div>
 
@@ -253,6 +424,7 @@ export default function CheckoutPage() {
                                         onChange={(e) => updateField('phone', e.target.value)}
                                         autoComplete="tel"
                                     />
+                                    {fieldErrors.phone && <p className="checkout__field-error">{fieldErrors.phone}</p>}
                                 </div>
 
                                 <h3 className="checkout__section-title">Phương thức vận chuyển</h3>
@@ -309,70 +481,105 @@ export default function CheckoutPage() {
 
                                 <h2 className="checkout__step-title">Thông tin thanh toán</h2>
 
-                                <div className="checkout__secure-badge">
-                                    <FiLock size={16} />
-                                    <span>Mã hóa SSL 256-bit — Thông tin của bạn được bảo mật</span>
-                                </div>
-
-                                <div className="checkout__field">
-                                    <label>Tên chủ thẻ</label>
-                                    <input
-                                        type="text"
-                                        placeholder="NGUYEN VAN A"
-                                        value={formData.cardName}
-                                        onChange={(e) => updateField('cardName', e.target.value)}
-                                        autoComplete="cc-name"
-                                    />
-                                </div>
-
-                                <div className="checkout__field">
-                                    <label>Số thẻ</label>
-                                    <div className="checkout__card-input-wrap">
+                                <div className="checkout__payment-choice">
+                                    <label>
                                         <input
-                                            type="text"
-                                            placeholder="1234 5678 9012 3456"
-                                            value={formData.cardNumber}
-                                            onChange={(e) => updateField('cardNumber', e.target.value)}
-                                            autoComplete="cc-number"
+                                            type="radio"
+                                            name="paymentMethod"
+                                            checked={formData.paymentMethod === 'Credit Card'}
+                                            onChange={() => updateField('paymentMethod', 'Credit Card')}
                                         />
-                                        <div className="checkout__card-icons">
-                                            <span>💳</span>
+                                        <span>Thẻ tín dụng/Ghi nợ</span>
+                                    </label>
+                                    <label>
+                                        <input
+                                            type="radio"
+                                            name="paymentMethod"
+                                            checked={formData.paymentMethod === 'COD'}
+                                            onChange={() => updateField('paymentMethod', 'COD')}
+                                        />
+                                        <span>Thanh toán khi nhận hàng (COD)</span>
+                                    </label>
+                                </div>
+
+                                {formData.paymentMethod === 'Credit Card' && (
+                                    <>
+                                        <div className="checkout__secure-badge">
+                                            <FiLock size={16} />
+                                            <span>Mã hóa SSL 256-bit — Thông tin của bạn được bảo mật</span>
                                         </div>
-                                    </div>
-                                </div>
 
-                                <div className="checkout__field-row">
-                                    <div className="checkout__field">
-                                        <label>Ngày hết hạn</label>
-                                        <input
-                                            type="text"
-                                            placeholder="MM/YY"
-                                            value={formData.expiry}
-                                            onChange={(e) => updateField('expiry', e.target.value)}
-                                            autoComplete="cc-exp"
-                                        />
-                                    </div>
-                                    <div className="checkout__field">
-                                        <label>CVV</label>
-                                        <input
-                                            type="text"
-                                            placeholder="123"
-                                            value={formData.cvv}
-                                            onChange={(e) => updateField('cvv', e.target.value)}
-                                            autoComplete="cc-csc"
-                                        />
-                                    </div>
-                                </div>
+                                        <div className="checkout__field">
+                                            <label>Tên chủ thẻ</label>
+                                            <input
+                                                type="text"
+                                                placeholder="NGUYEN VAN A"
+                                                value={formData.cardName}
+                                                onChange={(e) => updateField('cardName', e.target.value)}
+                                                autoComplete="cc-name"
+                                            />
+                                            {fieldErrors.cardName && <p className="checkout__field-error">{fieldErrors.cardName}</p>}
+                                        </div>
 
-                                {/* Hình thức thanh toán */}
-                                <div className="checkout__payment-methods">
-                                    <span className="checkout__pm-label">Chấp nhận:</span>
-                                    <div className="checkout__pm-icons">
-                                        {['💳 Visa', '💳 MC', '💳 AMEX', '🏦 Chuyển khoản'].map((m, i) => (
-                                            <span key={i} className="checkout__pm-icon">{m}</span>
-                                        ))}
+                                        <div className="checkout__field">
+                                            <label>Số thẻ</label>
+                                            <div className="checkout__card-input-wrap">
+                                                <input
+                                                    type="text"
+                                                    placeholder="1234 5678 9012 3456"
+                                                    value={formData.cardNumber}
+                                                    onChange={(e) => updateField('cardNumber', e.target.value)}
+                                                    autoComplete="cc-number"
+                                                />
+                                                <div className="checkout__card-icons">
+                                                    <span>💳</span>
+                                                </div>
+                                            </div>
+                                            {fieldErrors.cardNumber && <p className="checkout__field-error">{fieldErrors.cardNumber}</p>}
+                                        </div>
+
+                                        <div className="checkout__field-row">
+                                            <div className="checkout__field">
+                                                <label>Ngày hết hạn</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="MM/YY"
+                                                    value={formData.expiry}
+                                                    onChange={(e) => updateField('expiry', e.target.value)}
+                                                    autoComplete="cc-exp"
+                                                />
+                                                {fieldErrors.expiry && <p className="checkout__field-error">{fieldErrors.expiry}</p>}
+                                            </div>
+                                            <div className="checkout__field">
+                                                <label>CVV</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="123"
+                                                    value={formData.cvv}
+                                                    onChange={(e) => updateField('cvv', e.target.value)}
+                                                    autoComplete="cc-csc"
+                                                />
+                                                {fieldErrors.cvv && <p className="checkout__field-error">{fieldErrors.cvv}</p>}
+                                            </div>
+                                        </div>
+
+                                        <div className="checkout__payment-methods">
+                                            <span className="checkout__pm-label">Chấp nhận:</span>
+                                            <div className="checkout__pm-icons">
+                                                {['💳 Visa', '💳 MC', '💳 AMEX', '🏦 Chuyển khoản'].map((m, i) => (
+                                                    <span key={i} className="checkout__pm-icon">{m}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {formData.paymentMethod === 'COD' && (
+                                    <div className="checkout__secure-badge" style={{ background: '#fff7ed', borderColor: '#fdba74', color: '#c2410c' }}>
+                                        <FiTruck size={16} />
+                                        <span>Bạn sẽ thanh toán khi nhận hàng. Vui lòng giữ điện thoại để shipper liên hệ.</span>
                                     </div>
-                                </div>
+                                )}
 
                                 <button
                                     className="btn btn-accent btn-lg checkout__continue"
@@ -419,7 +626,7 @@ export default function CheckoutPage() {
                                 </p>
                                 <div className="checkout__confirmation-actions">
                                     <Link to="/" className="btn btn-primary btn-lg">Tiếp tục mua sắm</Link>
-                                    <button className="btn btn-outline">Theo dõi đơn hàng</button>
+                                    <Link to="/profile?tab=orders" className="btn btn-outline">Theo dõi đơn hàng</Link>
                                 </div>
                             </div>
                         )}
@@ -436,20 +643,20 @@ export default function CheckoutPage() {
                                         Giỏ hàng đang trống.
                                     </p>
                                 ) : (
-                                    cart.map((item, idx) => (
-                                        <div key={idx} className="checkout__summary-item">
+                                    cart.map((item) => (
+                                        <div key={item.product.id} className="checkout__summary-item">
                                             <img src={item.product.image} alt={item.product.name} className="checkout__summary-img" />
                                             <div className="checkout__summary-item-info">
                                                 <p className="checkout__summary-item-name">{item.product.name}</p>
                                                 <div className="checkout__summary-item-qty">
-                                                    <button onClick={() => updateQuantity(idx, -1)}><FiMinus size={12} /></button>
+                                                    <button onClick={() => updateQuantity(item.product.id, -1, item.quantity)}><FiMinus size={12} /></button>
                                                     <span>{item.quantity}</span>
-                                                    <button onClick={() => updateQuantity(idx, 1)}><FiPlus size={12} /></button>
+                                                    <button onClick={() => updateQuantity(item.product.id, 1, item.quantity)}><FiPlus size={12} /></button>
                                                 </div>
                                             </div>
                                             <div className="checkout__summary-item-right">
                                                 <span className="checkout__summary-item-price">{formatVND(item.product.price * item.quantity)}</span>
-                                                <button className="checkout__summary-remove" onClick={() => removeItem(idx)}>
+                                                <button className="checkout__summary-remove" onClick={() => removeItem(item.product.id)}>
                                                     <FiTrash2 size={14} />
                                                 </button>
                                             </div>

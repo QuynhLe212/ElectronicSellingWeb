@@ -1,39 +1,37 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminSidebar from "../components/AdminSidebar";
-const getUserFromStorage = (key) => {
-  const raw = localStorage.getItem(key);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-};
-
-const buildUsersForAdmin = () => {
-  const currentUser = getUserFromStorage("user_data");
-  const localAuthUser = getUserFromStorage("local_auth_user");
-
-  return [currentUser, localAuthUser]
-    .filter(Boolean)
-    .map((user, index) => ({
-      id: user.id || Date.now() + index,
-      name: user.name || user.fullName || "Người dùng",
-      email: user.email || "",
-      avatar:
-        user.avatarUrl ||
-        user.avatar?.url ||
-        `https://i.pravatar.cc/100?u=${encodeURIComponent(user.email || String(index))}`,
-    }))
-    .filter((user) => user.email);
-};
+import { getUsersAdmin } from "../services/usersService";
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState(() => buildUsersForAdmin());
+  const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadUsers = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage("");
+        const response = await getUsersAdmin({ page: 1, limit: 500 });
+        if (ignore) return;
+        setUsers(Array.isArray(response?.users) ? response.users : []);
+      } catch (error) {
+        if (ignore) return;
+        setErrorMessage(error.message || "Không thể tải người dùng.");
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const filteredUsers = users.filter(
     (u) =>
@@ -51,6 +49,9 @@ export default function AdminUsers() {
 
       <div className="admin__content">
         <h1 className="admin__title">Quản lý người dùng</h1>
+
+        {isLoading && <p>Đang tải người dùng...</p>}
+        {errorMessage && <p style={{ color: "var(--danger)" }}>{errorMessage}</p>}
 
         {/* TOOLBAR */}
         <div className="admin__toolbar modern">

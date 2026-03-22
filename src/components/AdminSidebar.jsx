@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { FiHome, FiBox, FiShoppingCart, FiUsers, FiSettings } from "react-icons/fi";
+import { FiHome, FiBox, FiShoppingCart, FiUsers, FiLogOut } from "react-icons/fi";
 
 export default function AdminSidebar() {
   const location = useLocation();
@@ -27,6 +27,13 @@ export default function AdminSidebar() {
           </Link>
         ))}
       </nav>
+
+      <div className="admin__sidebar-footer">
+        <Link to="/" className="admin__exit-btn">
+          <FiLogOut />
+          <span>Thoát</span>
+        </Link>
+      </div>
     </div>
   );
 }

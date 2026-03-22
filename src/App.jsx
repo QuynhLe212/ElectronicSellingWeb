@@ -8,6 +8,8 @@ import ProductDetailPage from "./pages/ProductDetailPage";
 import FavoritesPage from "./pages/FavoritesPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ProfilePage from "./pages/ProfilePage";
+import FaqPage from "./pages/FaqPage";
+import ReturnsRefundsPage from "./pages/ReturnsRefundsPage";
 import LoginPage from "./pages/LoginPage";
 import SignUpPage from "./pages/SignUpPage";
 import AdminPage from "./pages/AdminPage";
@@ -24,10 +26,14 @@ function ScrollToTop() {
 }
 
 function App() {
+  const location = useLocation();
+  const isAdminRoute =
+    location.pathname === "/admin" || location.pathname.startsWith("/admin/");
+
   return (
     <div className="page-wrapper">
       <ScrollToTop />
-      <Header />
+      {!isAdminRoute && <Header />}
       <main className="page-content">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -35,6 +41,8 @@ function App() {
           <Route path="/product/:id" element={<ProductDetailPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/faq" element={<FaqPage />} />
+          <Route path="/returns-refunds" element={<ReturnsRefundsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/favorites" element={<FavoritesPage />} />
@@ -45,7 +53,7 @@ function App() {
           <Route path="/admin/users" element={<AdminUsers />} />
         </Routes>
       </main>
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </div>
   );
 }
