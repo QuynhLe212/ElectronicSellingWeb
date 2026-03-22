@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiSearch, FiUser, FiShoppingCart, FiHeart, FiMenu, FiX, FiChevronDown, FiPhone, FiMail, FiTruck } from 'react-icons/fi';
 import { categories } from '../data/data';
-import { getFavorites } from '../services/favoritesService';
+import { getFavorites, subscribeFavoritesChanges } from '../services/favoritesService';
 import { getCartCount, subscribeCartChanges } from '../services/cartService';
 import { getProducts } from '../services/productsService';
-import { searchProductsByCriteria } from '../utils/searchEngine';
 import './Header.css';
 
 const megaMenuData = {
@@ -39,7 +38,7 @@ const formatVND = (price) => Number(price || 0).toLocaleString('vi-VN') + 'đ';
 
 export default function Header() {
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchProducts, setSearchProducts] = useState([]);
+    const [searchResults, setSearchResults] = useState([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [activeMega, setActiveMega] = useState(null);
@@ -64,9 +63,11 @@ export default function Header() {
         };
         updateFavoritesCount();
 
-        // Listen for storage changes (when favorites are updated in other tabs/windows)
-        window.addEventListener('storage', updateFavoritesCount);
-        return () => window.removeEventListener('storage', updateFavoritesCount);
+        const unsubscribe = subscribeFavoritesChanges(() => {
+            updateFavoritesCount();
+        });
+
+        return unsubscribe;
     }, []);
 
     useEffect(() => {
@@ -94,36 +95,45 @@ export default function Header() {
 
     useEffect(() => {
         let ignore = false;
+        const keyword = searchQuery.trim();
 
-        const loadProductsForSearch = async () => {
+        if (!keyword) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            return () => {
+                ignore = true;
+            };
+        }
+
+        const timerId = setTimeout(async() => {
             try {
                 setSearchLoading(true);
-                const response = await getProducts({ page: 1, limit: 300, sort: '-rating' });
+                const response = await getProducts({
+                    search: keyword,
+                    sort: 'relevance',
+                    page: 1,
+                    limit: 8,
+                });
+
                 if (ignore) return;
-                setSearchProducts(Array.isArray(response?.products) ? response.products : []);
+                setSearchResults(Array.isArray(response?.products) ? response.products : []);
             } catch {
                 if (ignore) return;
-                setSearchProducts([]);
+                setSearchResults([]);
             } finally {
                 if (!ignore) {
                     setSearchLoading(false);
                 }
             }
-        };
-
-        loadProductsForSearch();
+        }, 220);
 
         return () => {
             ignore = true;
+            clearTimeout(timerId);
         };
-    }, []);
+    }, [searchQuery]);
 
-    const rankedSearchResults = useMemo(
-        () => searchProductsByCriteria(searchProducts, { query: searchQuery, sortBy: 'relevance', limit: 8 }),
-        [searchProducts, searchQuery]
-    );
-
-    const keywordSuggestions = rankedSearchResults
+    const keywordSuggestions = searchResults
         .map((p) => p.name)
         .filter((name, index, list) => list.indexOf(name) === index)
         .slice(0, 5);
@@ -202,13 +212,13 @@ export default function Header() {
 
                                     {searchLoading && <p className="header__search-empty">Đang tải dữ liệu...</p>}
 
-                                    {!searchLoading && rankedSearchResults.length === 0 && (
+                                    {!searchLoading && searchResults.length === 0 && (
                                         <p className="header__search-empty">Không tìm thấy sản phẩm phù hợp với từ khóa này.</p>
                                     )}
 
-                                    {!searchLoading && rankedSearchResults.length > 0 && (
+                                    {!searchLoading && searchResults.length > 0 && (
                                         <div className="header__search-products">
-                                            {rankedSearchResults.map((product) => (
+                                            {searchResults.map((product) => (
                                                 <button
                                                     type="button"
                                                     key={product.id}
