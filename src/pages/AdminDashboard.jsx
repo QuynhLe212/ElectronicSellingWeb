@@ -61,7 +61,7 @@ export default function AdminDashboard() {
         const [productResponse, orderResponse, usersResponse] = await Promise.all([
           getProducts({ page: 1, limit: 500 }),
           getOrdersAdmin({ page: 1, limit: 100 }, { withMeta: true }),
-          getUsersAdmin({ page: 1, limit: 500 }),
+          getUsersAdmin({ page: 1, limit: 500, role: "user" }),
         ]);
 
         if (ignore) return;
@@ -94,10 +94,19 @@ export default function AdminDashboard() {
           0
         );
 
+        const regularUsersCountFromPagination = Number(usersResponse?.pagination?.total);
+        const regularUsersCountFromList = Array.isArray(usersResponse?.users)
+          ? usersResponse.users.filter(
+              (user) => String(user?.role || "user").toLowerCase() !== "admin"
+            ).length
+          : 0;
+
         setTotals({
           products: Number(productResponse?.total || productResponse?.products?.length || 0),
           orders: Number(orderResponse?.pagination?.totalOrders || allOrders.length || 0),
-          users: Number(usersResponse?.pagination?.total || usersResponse?.users?.length || 0),
+          users: Number.isFinite(regularUsersCountFromPagination)
+            ? regularUsersCountFromPagination
+            : regularUsersCountFromList,
           revenue: syncedRevenue,
         });
       } catch (error) {

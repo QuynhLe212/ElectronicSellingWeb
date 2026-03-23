@@ -58,6 +58,41 @@ function formatMemberSince(dateString) {
   return date.toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" });
 }
 
+const ORDER_STATUS_LABELS = {
+  pending: "Chờ xử lý",
+  processing: "Đang xử lý",
+  shipping: "Đang giao",
+  delivered: "Đã giao",
+  cancelled: "Đã hủy",
+};
+
+function normalizeOrderStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (["pending", "cho xu ly", "cho xu li"].includes(normalized)) return "pending";
+  if (["processing", "dang xu ly", "dang xu li"].includes(normalized)) return "processing";
+  if (["shipping", "shipped", "dang giao"].includes(normalized)) return "shipping";
+  if (["delivered", "da giao"].includes(normalized)) return "delivered";
+  if (["cancelled", "canceled", "da huy"].includes(normalized)) return "cancelled";
+  return "pending";
+}
+
+function isCorruptedVietnameseText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  return /\uFFFD/.test(raw) || /Ã|Ä|á»|áº|á¸|Â/.test(raw);
+}
+
+function getOrderStatusLabel(order) {
+  const status = normalizeOrderStatus(order?.status);
+  const rawLabel = String(order?.statusLabel || "").trim();
+
+  if (!rawLabel || isCorruptedVietnameseText(rawLabel)) {
+    return ORDER_STATUS_LABELS[status] || ORDER_STATUS_LABELS.pending;
+  }
+
+  return rawLabel;
+}
+
 export default function ProfilePage() {
   const navigate = useNavigate();
   const avatarInputRef = useRef(null);
@@ -639,7 +674,7 @@ export default function ProfilePage() {
                     {orders.slice(0, 3).map((order) => (
                       <div key={order.id || order._id} className="profile__info-card">
                         <strong>Đơn #{order.id || order._id}</strong>
-                        <p>Trạng thái: {order.statusLabel || order.status || "Đang xử lý"}</p>
+                        <p>Trạng thái: {getOrderStatusLabel(order)}</p>
                         <p>Tổng tiền: {formatVND(Number(order.total || order.totalPrice || 0))}</p>
                       </div>
                     ))}
@@ -686,7 +721,7 @@ export default function ProfilePage() {
                           </div>
                           <div className="profile__info-item">
                             <span className="profile__info-label">Trạng thái</span>
-                            <span className="profile__info-value">{order.statusLabel || order.status || "Đang xử lý"}</span>
+                            <span className="profile__info-value">{getOrderStatusLabel(order)}</span>
                           </div>
                           <div className="profile__info-item">
                             <span className="profile__info-label">Tổng tiền</span>

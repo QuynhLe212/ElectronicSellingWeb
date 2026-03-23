@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiSearch, FiUser, FiShoppingCart, FiHeart, FiMenu, FiX, FiChevronDown, FiPhone, FiMail, FiTruck } from 'react-icons/fi';
 import { categories } from '../data/data';
-import { getFavorites } from '../services/favoritesService';
+import { getFavorites, subscribeFavoritesChanges } from '../services/favoritesService';
 import { getCartCount, subscribeCartChanges } from '../services/cartService';
+import { getProducts } from '../services/productsService';
 import './Header.css';
 
 const megaMenuData = {
@@ -33,14 +34,20 @@ const megaMenuData = {
     },
 };
 
+const formatVND = (price) => Number(price || 0).toLocaleString('vi-VN') + 'đ';
+
 export default function Header() {
     const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
     const [activeMega, setActiveMega] = useState(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [favoritesCount, setFavoritesCount] = useState(0);
     const [cartCount, setCartCount] = useState(0);
     const megaRef = useRef(null);
+    const searchRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -56,9 +63,11 @@ export default function Header() {
         };
         updateFavoritesCount();
 
-        // Listen for storage changes (when favorites are updated in other tabs/windows)
-        window.addEventListener('storage', updateFavoritesCount);
-        return () => window.removeEventListener('storage', updateFavoritesCount);
+        const unsubscribe = subscribeFavoritesChanges(() => {
+            updateFavoritesCount();
+        });
+
+        return unsubscribe;
     }, []);
 
     useEffect(() => {
@@ -75,17 +84,85 @@ export default function Header() {
             if (megaRef.current && !megaRef.current.contains(e.target)) {
                 setActiveMega(null);
             }
+
+            if (searchRef.current && !searchRef.current.contains(e.target)) {
+                setSearchOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
+    useEffect(() => {
+        let ignore = false;
+        const keyword = searchQuery.trim();
+
+        if (!keyword) {
+            setSearchResults([]);
+            setSearchLoading(false);
+            return () => {
+                ignore = true;
+            };
+        }
+
+        const timerId = setTimeout(async() => {
+            try {
+                setSearchLoading(true);
+                const response = await getProducts({
+                    search: keyword,
+                    sort: 'relevance',
+                    page: 1,
+                    limit: 8,
+                });
+
+                if (ignore) return;
+                setSearchResults(Array.isArray(response?.products) ? response.products : []);
+            } catch {
+                if (ignore) return;
+                setSearchResults([]);
+            } finally {
+                if (!ignore) {
+                    setSearchLoading(false);
+                }
+            }
+        }, 220);
+
+        return () => {
+            ignore = true;
+            clearTimeout(timerId);
+        };
+    }, [searchQuery]);
+
+    const keywordSuggestions = searchResults
+        .map((p) => p.name)
+        .filter((name, index, list) => list.indexOf(name) === index)
+        .slice(0, 5);
+
+    const showSearchDropdown = searchOpen && searchQuery.trim().length > 0;
+
     const handleSearch = (e) => {
         e.preventDefault();
-        if (searchQuery.trim()) {
-            navigate(`/products?search=${encodeURIComponent(searchQuery)}`);
-            setSearchQuery('');
+        const keyword = searchQuery.trim();
+        if (keyword) {
+            navigate(`/products?search=${encodeURIComponent(keyword)}`);
+            setSearchOpen(false);
         }
+    };
+
+    const handleSearchInputChange = (value) => {
+        setSearchQuery(value);
+        setSearchOpen(true);
+    };
+
+    const handleSelectKeyword = (keyword) => {
+        setSearchQuery(keyword);
+        navigate(`/products?search=${encodeURIComponent(keyword)}`);
+        setSearchOpen(false);
+    };
+
+    const handleSelectProduct = (productId) => {
+        navigate(`/product/${productId}`);
+        setSearchOpen(false);
     };
 
     return (
@@ -98,16 +175,76 @@ export default function Header() {
                         <span className="header__logo-text">Electro<strong>Shop</strong></span>
                     </Link>
 
-                    <form className="header__search" onSubmit={handleSearch}>
+                    <form className="header__search" onSubmit={handleSearch} ref={searchRef}>
                         <FiSearch className="header__search-icon" />
                         <input
                             type="text"
                             placeholder="Tìm kiếm sản phẩm, thương hiệu..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => setSearchOpen(true)}
+                            onChange={(e) => handleSearchInputChange(e.target.value)}
                             className="header__search-input"
                         />
                         <button type="submit" className="header__search-btn">Tìm kiếm</button>
+
+                        {showSearchDropdown && (
+                            <div className="header__search-dropdown">
+                                {keywordSuggestions.length > 0 && (
+                                    <div className="header__search-section">
+                                        <h4 className="header__search-section-title">Có phải bạn muốn tìm</h4>
+                                        <div className="header__search-keywords">
+                                            {keywordSuggestions.map((keyword) => (
+                                                <button
+                                                    key={keyword}
+                                                    type="button"
+                                                    className="header__search-keyword"
+                                                    onClick={() => handleSelectKeyword(keyword)}
+                                                >
+                                                    <FiSearch size={14} /> {keyword}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="header__search-section">
+                                    <h4 className="header__search-section-title">🔥 Sản phẩm gợi ý</h4>
+
+                                    {searchLoading && <p className="header__search-empty">Đang tải dữ liệu...</p>}
+
+                                    {!searchLoading && searchResults.length === 0 && (
+                                        <p className="header__search-empty">Không tìm thấy sản phẩm phù hợp với từ khóa này.</p>
+                                    )}
+
+                                    {!searchLoading && searchResults.length > 0 && (
+                                        <div className="header__search-products">
+                                            {searchResults.map((product) => (
+                                                <button
+                                                    type="button"
+                                                    key={product.id}
+                                                    className="header__search-product"
+                                                    onClick={() => handleSelectProduct(product.id)}
+                                                >
+                                                    <img src={product.image} alt={product.name} className="header__search-product-image" />
+                                                    <div className="header__search-product-info">
+                                                        <p className="header__search-product-name">{product.name}</p>
+                                                        <p className="header__search-product-meta">{product.brand}</p>
+                                                        <p className="header__search-product-price">
+                                                            {formatVND(product.price)}
+                                                            {product.originalPrice > product.price && (
+                                                                <span className="header__search-product-original">
+                                                                    {formatVND(product.originalPrice)}
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </form>
 
                     <div className="header__icons">

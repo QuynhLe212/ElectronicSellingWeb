@@ -89,19 +89,20 @@ export default function ProductListPage() {
                     selectedPriceRange !== null ? priceRanges[selectedPriceRange] : null;
 
                 const sortMap = {
-                    relevance: '-createdAt',
+                    relevance: searchQuery ? 'relevance' : '-createdAt',
                     'price-low': 'price',
                     'price-high': '-price',
-                    rating: '-rating',
-                    newest: '-createdAt',
+                    rating: 'rating',
+                    newest: 'newest',
+                    'best-selling': 'best-selling',
                 };
 
                 const response = await getProducts({
-                    category: selectedCategories[0] || '',
+                    category: '',
                     search: searchQuery,
                     minPrice: selectedRange ? selectedRange.min : '',
                     maxPrice: selectedRange && Number.isFinite(selectedRange.max) ? selectedRange.max : '',
-                    brand: selectedBrands[0] || '',
+                    brand: '',
                     sort: sortMap[sortBy] || '-createdAt',
                     page: 1,
                     limit: 500,
@@ -129,7 +130,35 @@ export default function ProductListPage() {
     }, [searchQuery, selectedCategories, selectedBrands, selectedPriceRange, sortBy, isDealsOnly]);
 
     const filteredProducts = useMemo(() => {
+        const selectedRange = selectedPriceRange !== null ? priceRanges[selectedPriceRange] : null;
         let result = [...productList];
+
+        if (selectedCategories.length > 0) {
+            result = result.filter((p) => selectedCategories.includes(p.category));
+        }
+
+        if (selectedBrands.length > 0) {
+            result = result.filter((p) => selectedBrands.includes(p.brand));
+        }
+
+        if (selectedRange) {
+            result = result.filter((p) => {
+                const price = Number(p.price || 0);
+                return price >= selectedRange.min && price <= selectedRange.max;
+            });
+        }
+
+        if (sortBy === 'price-low') {
+            result.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+        } else if (sortBy === 'price-high') {
+            result.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+        } else if (sortBy === 'rating') {
+            result.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+        } else if (sortBy === 'best-selling') {
+            result.sort((a, b) => Number(b.sold || 0) - Number(a.sold || 0));
+        } else if (sortBy === 'newest') {
+            result.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        }
 
         if (isDealsOnly) {
             result = result.filter((p) => {
@@ -140,20 +169,21 @@ export default function ProductListPage() {
             });
         }
 
-        if (selectedCategories.length > 1) {
-            result = result.filter((p) => selectedCategories.includes(p.category));
-        }
-
-        if (selectedBrands.length > 1) {
-            result = result.filter((p) => selectedBrands.includes(p.brand));
-        }
-
         if (selectedRating > 0) {
             result = result.filter((p) => Number(p.rating || 0) >= selectedRating);
         }
 
         return result;
-    }, [productList, selectedCategories, selectedBrands, selectedRating]);
+    }, [
+        productList,
+        searchQuery,
+        selectedCategories,
+        selectedBrands,
+        selectedPriceRange,
+        selectedRating,
+        sortBy,
+        isDealsOnly,
+    ]);
 
     const displayTotalPages = useMemo(() => {
         return Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
@@ -333,6 +363,7 @@ export default function ProductListPage() {
                                         <option value="relevance">Phù hợp nhất</option>
                                         <option value="price-low">Giá: Thấp đến Cao</option>
                                         <option value="price-high">Giá: Cao đến Thấp</option>
+                                        <option value="best-selling">Bán chạy nhất</option>
                                         <option value="rating">Đánh giá cao nhất</option>
                                         <option value="newest">Mới nhất</option>
                                     </select>

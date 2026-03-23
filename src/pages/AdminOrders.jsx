@@ -39,24 +39,26 @@ export default function AdminOrders() {
 
   const formatPrice = (price) => price.toLocaleString("vi-VN") + "₫";
 
+  const normalizeStatus = (status) => String(status || "pending").trim().toLowerCase();
+
   const statusLabelMap = {
-    Pending: "Chờ xử lý",
-    Processing: "Đang xử lý",
-    Shipped: "Đang giao",
-    Delivered: "Đã giao",
-    Cancelled: "Đã hủy",
-    Refunded: "Đã hoàn tiền",
+    pending: "Chờ xử lý",
+    processing: "Đang xử lý",
+    shipping: "Đang giao",
+    delivered: "Đã giao",
+    cancelled: "Đã hủy",
+    refunded: "Đã hoàn tiền",
   };
 
   const getStatusClass = (status) => {
-    switch (status) {
-      case "Delivered":
+    switch (normalizeStatus(status)) {
+      case "delivered":
         return "status delivered";
-      case "Shipped":
-      case "Processing":
+      case "shipping":
+      case "processing":
         return "status processing";
-      case "Cancelled":
-      case "Refunded":
+      case "cancelled":
+      case "refunded":
         return "status cancelled";
       default:
         return "status pending";
@@ -122,7 +124,7 @@ export default function AdminOrders() {
                   <td>{new Date(order.createdAt).toLocaleDateString("vi-VN")}</td>
                   <td>
                     <span className={getStatusClass(order.status)}>
-                      {statusLabelMap[order.status] || order.status}
+                      {statusLabelMap[normalizeStatus(order.status)] || order.status}
                     </span>
                   </td>
                   <td>{formatPrice(order.totalPrice)}</td>
@@ -165,7 +167,7 @@ export default function AdminOrders() {
                     className={getStatusClass(selectedOrder.status)}
                     style={{ marginLeft: "8px" }}
                   >
-                    {statusLabelMap[selectedOrder.status] || selectedOrder.status}
+                    {statusLabelMap[normalizeStatus(selectedOrder.status)] || selectedOrder.status}
                   </span>
                 </p>
               </div>
@@ -234,7 +236,7 @@ export default function AdminOrders() {
                 <div className="status-update">
                   <label>Thay đổi trạng thái:</label>
                   <select
-                    value={selectedOrder.status}
+                    value={normalizeStatus(selectedOrder.status)}
                     onChange={(e) => handleUpdateStatus(selectedOrder._id, e.target.value)}
                   >
                     {Object.keys(statusLabelMap).map((key) => (
